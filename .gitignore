@@ -1,0 +1,43 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# next
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# build / coverage
+build/
+dist/
+coverage/
+
+# env (segredos): só .env.example é versionado
+.env
+.env.*
+!.env.example
+
+# prisma client gerado
+src/generated/
+
+# logs e SO
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+
+# playwright
+test-results/
+playwright-report/
+.playwright-mcp/
+
+# vercel
+.vercel
+
+# ferramenta de execução das fases (não é produto)
+.claude/
+docs/features/*/logs/
+scripts/run-fase.sh
+scripts/status-fase.sh
+docs/features/*/evidencias/

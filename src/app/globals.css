@@ -1,0 +1,220 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Tokens do design system da Algoritmi (../algoritmi/DESIGN.md, D8).
+ * Telas usam só estes tokens: nada de cores, fontes ou raios soltos.
+ */
+:root {
+  /* Paleta da marca */
+  --violet: #492deb;
+  --violet-deep: #44349e;
+  --violet-wash: rgb(73 45 235 / 0.07);
+  --paper: #f2f2f2;
+  --surface: #ffffff;
+  --ink: #262223;
+  --night: #211d1e;
+  --ink-2: #5b5557;
+  --ink-3: #6b6668;
+  --numeral-rest: #8a8587;
+  --line: rgb(38 34 35 / 0.14);
+  --line-strong: rgb(38 34 35 / 0.28);
+  --tint: rgb(38 34 35 / 0.04);
+  --on-dark: #f2f2f2;
+  --on-dark-2: rgb(242 242 242 / 0.72);
+  --danger: #b3261e;
+
+  /* Variáveis do shadcn/ui mapeadas para a marca */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--violet);
+  --primary-foreground: var(--on-dark);
+  --secondary: var(--surface);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper);
+  --muted-foreground: var(--ink-2);
+  --accent: var(--tint);
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--violet);
+  --chart-1: #492deb;
+  --chart-2: #9384f4;
+  --chart-3: #44349e;
+  --chart-4: #8a8587;
+  --chart-5: #262223;
+  --radius: 10px;
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--violet);
+  --sidebar-primary-foreground: var(--on-dark);
+  --sidebar-accent: var(--tint);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--violet);
+}
+
+@theme inline {
+  /* Cores da marca: bg-violet, text-ink-2, border-line-strong... */
+  --color-violet: var(--violet);
+  --color-violet-deep: var(--violet-deep);
+  --color-violet-wash: var(--violet-wash);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-night: var(--night);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-numeral-rest: var(--numeral-rest);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-tint: var(--tint);
+  --color-on-dark: var(--on-dark);
+  --color-on-dark-2: var(--on-dark-2);
+  --color-danger: var(--danger);
+
+  /* Cores semânticas do shadcn/ui */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* Tipografia: Manrope no texto e interface, Poppins 600 só em títulos */
+  --font-sans: var(--font-manrope), ui-sans-serif, sans-serif;
+  --font-heading: var(--font-poppins), ui-sans-serif, sans-serif;
+
+  --text-display: clamp(2.125rem, 1.35rem + 2.9vw, 3.75rem);
+  --text-display--line-height: 1.06;
+  --text-display--letter-spacing: -0.032em;
+  --text-display--font-weight: 600;
+  --text-headline: clamp(1.75rem, 1.35rem + 1.5vw, 2.5rem);
+  --text-headline--line-height: 1.12;
+  --text-headline--letter-spacing: -0.025em;
+  --text-headline--font-weight: 600;
+  --text-title: clamp(1.1875rem, 1.1rem + 0.35vw, 1.375rem);
+  --text-title--line-height: 1.25;
+  --text-title--letter-spacing: -0.015em;
+  --text-title--font-weight: 600;
+  --text-lead: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --text-lead--line-height: 1.55;
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.6;
+  --text-small: 0.9375rem;
+  --text-small--line-height: 1.5;
+  --text-label: 0.9375rem;
+  --text-label--line-height: 1.4;
+  --text-label--font-weight: 600;
+  --text-micro: 0.8125rem;
+  --text-micro--line-height: 1.4;
+  --text-micro--font-weight: 500;
+
+  /* Raios: rounded-sheet, rounded-control, rounded-frame, rounded-panel */
+  --radius-sheet: 6px;
+  --radius-control: 10px;
+  --radius-frame: 16px;
+  --radius-panel: 24px;
+  --radius-pill: 999px;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Alturas de controle e ritmo: h-control, h-control-sm, h-input, h-chip, px-gutter, py-section */
+  --spacing-control: 52px;
+  --spacing-control-sm: 42px;
+  --spacing-input: 50px;
+  --spacing-toggle: 48px;
+  --spacing-chip: 40px;
+  --spacing-header: 72px;
+  --spacing-gutter: clamp(1rem, 0.4rem + 2.6vw, 2.5rem);
+  --spacing-section: clamp(4.5rem, 3.4rem + 3.6vw, 7rem);
+  --spacing-head-gap: clamp(2.5rem, 2rem + 1.6vw, 3.5rem);
+  --container-page: 1320px;
+
+  /* Sombras grafite, nunca coloridas */
+  --shadow-rest: 0 1px 2px rgb(38 34 35 / 0.06), 0 4px 12px rgb(38 34 35 / 0.05);
+  --shadow-object: 0 2px 4px rgb(38 34 35 / 0.06), 0 16px 40px rgb(38 34 35 / 0.1);
+  --shadow-panel: 0 30px 80px rgb(33 29 30 / 0.28);
+  --shadow-tray: 0 12px 40px rgb(33 29 30 / 0.3), 0 2px 6px rgb(33 29 30 / 0.2);
+  /* Anel de foco dos campos (design.json: focus-field), junto da borda violeta */
+  --shadow-focus: 0 0 0 3px rgb(73 45 235 / 0.18);
+
+  /* Movimento */
+  --ease-brand-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-brand-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-body text-foreground;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-heading text-balance;
+  }
+  ::selection {
+    @apply bg-violet text-on-dark;
+  }
+  input,
+  textarea {
+    caret-color: var(--violet);
+  }
+  a {
+    @apply text-violet-deep;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
