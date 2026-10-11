@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { clientIp } from "@/server/auth/client-ip";
 import { getAuthContext, TENANT_ID_HEADER, USER_ID_HEADER } from "@/server/auth/context";
 import { hashSessionToken, issueSession, SESSION_TTL_MS, sessionCookieOptions } from "@/server/auth/session";
+import { isReservedSlug, RESERVED_SLUGS } from "@/server/auth/reserved-slugs";
 import { nextFreeSlug, slugify, SLUG_MAX_LENGTH } from "@/server/auth/slug";
 import { loginSchema, registerSchema } from "@/server/validation/auth";
 
@@ -23,6 +24,17 @@ describe("slug do tenant (D3, premissa b)", () => {
     expect(nextFreeSlug("ana", ["ana"])).toBe("ana-2");
     expect(nextFreeSlug("ana", ["ana", "ana-2", "ana-3"])).toBe("ana-4");
     expect(nextFreeSlug("ana", ["ana", "ana-3"])).toBe("ana-2");
+  });
+
+  it("slug reservado nunca é usado: 'Login' vira login-2 (D1)", () => {
+    for (const route of ["login", "cadastro", "painel", "api"]) expect(isReservedSlug(route)).toBe(true);
+    expect(nextFreeSlug(slugify("Login"), [])).toBe("login-2");
+    expect(nextFreeSlug(slugify("Painel"), ["painel-2"])).toBe("painel-3");
+    expect(isReservedSlug("login-2")).toBe(false);
+  });
+
+  it("lista reservada só tem slugs no formato gerado pelo cadastro", () => {
+    for (const slug of RESERVED_SLUGS) expect(slugify(slug)).toBe(slug);
   });
 });
 

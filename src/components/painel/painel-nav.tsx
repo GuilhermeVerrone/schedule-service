@@ -2,20 +2,41 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, type Ref } from "react";
 import { cn } from "@/lib/utils";
 import { PANEL_NAV } from "./nav-items";
 
 // Links do painel (DESIGN.md > Navigation): Manrope 500 em tamanho small, placa tint no hover.
 // A página atual ganha peso 600 e um traço grafite embaixo, não só uma mudança de cor.
+// No celular a lista rola na horizontal: a página atual entra na área visível (sem rolar a página).
 export function PainelNav({ className }: { className?: string }) {
-  return <PainelNavLinks className={className} pathname={usePathname()} />;
+  const pathname = usePathname();
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = ref.current;
+    const current = nav?.querySelector<HTMLElement>("[aria-current='page']");
+    if (!nav || !current || nav.scrollWidth <= nav.clientWidth) return;
+    const box = current.getBoundingClientRect();
+    const area = nav.getBoundingClientRect();
+    if (box.right > area.right) nav.scrollLeft += box.right - area.right + 16;
+    else if (box.left < area.left) nav.scrollLeft -= area.left - box.left + 16;
+  }, [pathname]);
+  return <PainelNavLinks ref={ref} className={className} pathname={pathname} />;
 }
 
 // Fallback do <Suspense> no layout: os mesmos links, sem marcar a página atual. Em rotas com
 // parâmetro dinâmico (/painel/profissionais/[id]/horarios) o caminho só existe na requisição.
-export function PainelNavLinks({ className, pathname }: { className?: string; pathname: string | null }) {
+export function PainelNavLinks({
+  className,
+  pathname,
+  ref,
+}: {
+  className?: string;
+  pathname: string | null;
+  ref?: Ref<HTMLElement>;
+}) {
   return (
-    <nav aria-label="Painel" className={className}>
+    <nav ref={ref} aria-label="Painel" className={className}>
       <ul className="flex gap-1">
         {PANEL_NAV.map((item) => {
           const active = pathname !== null && (item.exact ? pathname === item.href : pathname.startsWith(item.href));

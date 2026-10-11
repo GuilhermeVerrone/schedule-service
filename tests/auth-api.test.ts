@@ -125,6 +125,12 @@ describe("cadastro (guia 7a, D3, premissa b)", () => {
     expect(slugs.sort()).toEqual([first.slug, `${first.slug}-2`, `${first.slug}-3`].sort());
   });
 
+  it("nome que coincide com rota reservada ganha slug diferente: 'Login' não vira login (D1)", async () => {
+    const account = await registerAccount("Login");
+    expect(account.slug).not.toBe("login");
+    expect(account.slug).toMatch(/^login-\d+$/);
+  });
+
   it("senha fraca: 400 weak_password e nada é criado", async () => {
     const email = uniqueEmail();
     const response = await registerRoute(

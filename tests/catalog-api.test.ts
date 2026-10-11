@@ -138,12 +138,14 @@ afterAll(async () => {
 });
 
 describe("cobertura: toda rota de negócio está na tabela do teste", () => {
-  it("a árvore src/app/api (fora /api/auth) bate com ROUTES", () => {
+  it("a árvore do catálogo em src/app/api bate com ROUTES", () => {
     const apiDir = join(process.cwd(), "src", "app", "api");
     const routes = (readdirSync(apiDir, { recursive: true }) as string[])
       .filter((file) => file.split(sep).at(-1) === "route.ts")
       .map((file) => ["/api", ...file.split(sep).slice(0, -1)].join("/"))
       .filter((route) => !route.startsWith("/api/auth"))
+      // A API da agenda (agenda-link-publico) tem a própria tabela em tests/agenda-api.test.ts.
+      .filter((route) => ["/api/professionals", "/api/services", "/api/working-hours"].some((p) => route.startsWith(p)))
       .sort();
     expect(routes).toEqual(Object.keys(ROUTES).sort());
   });

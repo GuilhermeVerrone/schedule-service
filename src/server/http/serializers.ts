@@ -1,4 +1,7 @@
-import type { Professional, Service, WorkingHours } from "@/generated/prisma/client";
+import type { Professional, Service, TimeBlock, WorkingHours } from "@/generated/prisma/client";
+import type { ManageState } from "@/server/agenda/public-booking";
+import type { PublicSite } from "@/server/repositories/public-repository";
+import type { AppointmentDetails } from "@/server/repositories/tenant-repository";
 
 // Corpo das respostas da API: sem tenant_id (vem sempre da sessão) e horários no mesmo
 // formato "HH:MM" da entrada.
@@ -37,5 +40,70 @@ export function workingHoursDto(interval: WorkingHours) {
     weekday: interval.weekday,
     start: minutesToTime(interval.startMinute),
     end: minutesToTime(interval.endMinute),
+  };
+}
+
+// Agendamento sem o hash do token de gestão: o painel nunca precisa dele.
+export function appointmentDto(appointment: AppointmentDetails) {
+  return {
+    id: appointment.id,
+    status: appointment.status,
+    startsAt: appointment.startsAt,
+    endsAt: appointment.endsAt,
+    canceledAt: appointment.canceledAt,
+    professional: appointment.professional,
+    service: appointment.service,
+    customer: appointment.customer,
+    createdAt: appointment.createdAt,
+    updatedAt: appointment.updatedAt,
+  };
+}
+
+export function timeBlockDto(block: TimeBlock) {
+  return {
+    id: block.id,
+    professionalId: block.professionalId,
+    startsAt: block.startsAt,
+    endsAt: block.endsAt,
+    reason: block.reason,
+    createdAt: block.createdAt,
+  };
+}
+
+// Site público (D1, D2): só campos públicos do negócio, sem tenant_id. Dos parâmetros da agenda,
+// só o que a tela de agendar mostra ao cliente.
+export function publicSiteDto(site: PublicSite) {
+  const { business } = site;
+  return {
+    business: {
+      slug: business.slug,
+      name: business.name,
+      description: business.description,
+      address: business.address,
+      phone: business.phone,
+      timezone: business.timezone,
+      booking: {
+        minAdvanceMinutes: business.minAdvanceMinutes,
+        maxWindowDays: business.maxWindowDays,
+        cancelDeadlineMinutes: business.cancelDeadlineMinutes,
+      },
+    },
+    services: site.services,
+    professionals: site.professionals,
+  };
+}
+
+// Agendamento visto pelo link de gestão (D6): sem id, sem hash e, do cliente, só o nome.
+export function publicAppointmentDto(appointment: AppointmentDetails, state: ManageState) {
+  return {
+    status: appointment.status,
+    startsAt: appointment.startsAt,
+    endsAt: appointment.endsAt,
+    canceledAt: appointment.canceledAt,
+    service: appointment.service,
+    professional: appointment.professional,
+    customer: { name: appointment.customer.name },
+    manageableUntil: state.manageableUntil,
+    canManage: state.canManage,
   };
 }

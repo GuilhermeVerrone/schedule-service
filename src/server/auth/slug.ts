@@ -1,3 +1,5 @@
+import { isReservedSlug } from "./reserved-slugs";
+
 // Slug do tenant gerado do nome do negócio (D3); em colisão ganha sufixo numérico (premissa b).
 
 export const SLUG_MAX_LENGTH = 48;
@@ -15,10 +17,10 @@ export function slugify(name: string): string {
   return slug || FALLBACK_SLUG;
 }
 
-// Primeiro livre entre base, base-2, base-3...
+// Primeiro livre entre base, base-2, base-3... Slug reservado (ex.: "login") conta como ocupado.
 export function nextFreeSlug(base: string, taken: Iterable<string>): string {
   const used = new Set(taken);
-  if (!used.has(base)) return base;
+  if (!used.has(base) && !isReservedSlug(base)) return base;
   for (let n = 2; ; n++) {
     const candidate = `${base}-${n}`;
     if (!used.has(candidate)) return candidate;

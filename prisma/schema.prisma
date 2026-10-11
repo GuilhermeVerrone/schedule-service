@@ -6,6 +6,10 @@
 // - working_hours: dia 0-6, 0 <= início < fim <= 1440, sem sobreposição por profissional/dia (EXCLUDE gist)
 // - (tenant_id, id) em professionals/services para FKs compostas: vínculos e horários
 //   nunca apontam para registro de outro tenant, nem por bug no código.
+// - tenants: faixas dos 5 parâmetros da agenda; slugs reservados renomeados na migração
+// - customers: telefone só dígitos com DDI 55
+// - appointments/time_blocks: fim > início; appointments sem sobreposição `confirmed` por
+//   profissional (EXCLUDE gist sobre tstzrange [início, fim))
 
 generator client {
   provider = "prisma-client"
@@ -22,13 +26,32 @@ enum UserRole {
   @@map("user_role")
 }
 
+enum AppointmentStatus {
+  confirmed
+  canceled
+  completed
+
+  @@map("appointment_status")
+}
+
 model Tenant {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  name      String
-  slug      String   @unique
-  timezone  String   @default("America/Sao_Paulo")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  name                  String
+  // Nunca um slug reservado (src/server/auth/reserved-slugs.ts): o site público fica em /{slug}.
+  slug                  String   @unique
+  timezone              String   @default("America/Sao_Paulo")
+  // Dados do mini-site público (D2), só texto.
+  description           String?
+  address               String?
+  phone                 String?
+  // Parâmetros da agenda (D3). Faixas nos CHECKs da migração.
+  slotStepMinutes       Int      @default(15) @map("slot_step_minutes") @db.SmallInt
+  bufferMinutes         Int      @default(0) @map("buffer_minutes") @db.SmallInt
+  minAdvanceMinutes     Int      @default(120) @map("min_advance_minutes")
+  maxWindowDays         Int      @default(60) @map("max_window_days") @db.SmallInt
+  cancelDeadlineMinutes Int      @default(120) @map("cancel_deadline_minutes")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   users                User[]
   sessions             Session[]
@@ -36,6 +59,9 @@ model Tenant {
   services             Service[]
   professionalServices ProfessionalService[]
   workingHours         WorkingHours[]
+  customers            Customer[]
+  appointments         Appointment[]
+  timeBlocks           TimeBlock[]
 
   @@map("tenants")
 }
@@ -100,6 +126,8 @@ model Professional {
   tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   services     ProfessionalService[]
   workingHours WorkingHours[]
+  appointments Appointment[]
+  timeBlocks   TimeBlock[]
 
   @@unique([tenantId, id])
   @@index([tenantId, archivedAt])
@@ -119,6 +147,7 @@ model Service {
 
   tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   professionals ProfessionalService[]
+  appointments  Appointment[]
 
   @@unique([tenantId, id])
   @@index([tenantId, archivedAt])
@@ -159,4 +188,89 @@ model WorkingHours {
 
   @@index([tenantId, professionalId, weekday])
   @@map("working_hours")
+}
+
+// Cliente final do negócio (D5), sem login. Reencontrado pelo telefone normalizado.
+model Customer {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  name          String
+  // Só dígitos, com DDI 55 (ex.: 5511987654321).
+  phone         String
+  email         String?
+  // LGPD: quando e por onde o consentimento foi dado (ex.: "public_booking"). Nulo em cadastro manual sem consentimento.
+  consentAt     DateTime? @map("consent_at") @db.Timestamptz(3)
+  consentSource String?   @map("consent_source")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, phone])
+  @@map("customers")
+}
+
+// Agendamento (D4). Só `confirmed` ocupa horário; a sobreposição é barrada no banco.
+// Profissional, serviço e cliente não são apagados com agendamentos (NO ACTION): arquiva-se,
+// e o histórico sobrevive. Apagar o tenant leva tudo em cascata.
+model Appointment {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  tenantId        String            @map("tenant_id") @db.Uuid
+  professionalId  String            @map("professional_id") @db.Uuid
+  serviceId       String            @map("service_id") @db.Uuid
+  customerId      String            @map("customer_id") @db.Uuid
+  startsAt        DateTime          @map("starts_at") @db.Timestamptz(3)
+  endsAt          DateTime          @map("ends_at") @db.Timestamptz(3)
+  status          AppointmentStatus @default(confirmed)
+  // SHA-256 do token do link de gestão (D6); o token puro só é mostrado ao cliente.
+  // Nulo em agendamento manual do dono.
+  manageTokenHash String?           @unique @map("manage_token_hash")
+  canceledAt      DateTime?         @map("canceled_at") @db.Timestamptz(3)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professional Professional @relation(fields: [tenantId, professionalId], references: [tenantId, id], onDelete: NoAction)
+  service      Service      @relation(fields: [tenantId, serviceId], references: [tenantId, id], onDelete: NoAction)
+  customer     Customer     @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, professionalId, startsAt])
+  @@index([tenantId, startsAt])
+  @@index([tenantId, customerId])
+  @@map("appointments")
+}
+
+// Bloqueio avulso da agenda de um profissional (D9), sem recorrência.
+model TimeBlock {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  professionalId String   @map("professional_id") @db.Uuid
+  startsAt       DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt         DateTime @map("ends_at") @db.Timestamptz(3)
+  reason         String?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professional Professional @relation(fields: [tenantId, professionalId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, professionalId, startsAt])
+  @@map("time_blocks")
+}
+
+// Limite de requisições das rotas públicas (D8), por balde (ex.: "public_booking") e chave (IP),
+// em janela móvel. Pré-tenant como login_attempts; o login segue na tabela própria.
+model RateLimitHit {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  bucket    String
+  key       String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([bucket, key, createdAt])
+  @@index([createdAt])
+  @@map("rate_limit_hits")
 }
