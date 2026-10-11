@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { isId, TenantScopeError, type TenantScope } from "./shared";
 import { createAppointmentsRepository } from "./tenant/appointments";
 import { createContactsRepository } from "./tenant/contacts";
+import { createEligibilityRepository } from "./tenant/eligibility";
 import { createConversationsRepository } from "./tenant/conversations";
 import { createMessagesRepository } from "./tenant/messages";
 import { createProfessionalServicesRepository } from "./tenant/professional-services";
@@ -23,6 +24,7 @@ export type { ServiceInput } from "./tenant/services";
 export { WorkingHoursOverlapError } from "./tenant/working-hours";
 export type { AgendaSettings } from "./tenant/settings";
 export type { ConsentInput } from "./tenant/contacts";
+export type { EligibilityFacts } from "./tenant/eligibility";
 export {
   AppointmentConflictError,
   AppointmentStatusError,
@@ -55,6 +57,7 @@ export function createTenantRepository(tenantId: string, db: PrismaClient = pris
     professionalServices: createProfessionalServicesRepository(scope),
     workingHours: createWorkingHoursRepository(scope),
     contacts: createContactsRepository(scope),
+    eligibility: createEligibilityRepository(scope),
     appointments: createAppointmentsRepository(scope),
     timeBlocks: createTimeBlocksRepository(scope),
     whatsappConnection: createWhatsAppConnectionRepository(scope),
