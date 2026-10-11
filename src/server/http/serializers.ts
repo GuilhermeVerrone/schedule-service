@@ -1,9 +1,19 @@
-import type { Professional, Service, TimeBlock, WorkingHours } from "@/generated/prisma/client";
+import type { MessageTemplate, Professional, Service, TimeBlock, WorkingHours } from "@/generated/prisma/client";
 import type { ManageState } from "@/server/agenda/public-booking";
 import type { ConnectionView } from "@/server/messaging/connection";
+import type { OutboundMessageType } from "@/server/outbound/message-types";
+import {
+  DEFAULT_TEMPLATES,
+  MAX_VARIATION_LENGTH,
+  MAX_VARIATIONS,
+  MIN_VARIATIONS,
+  TEMPLATE_VARIABLES,
+} from "@/server/outbound/templates";
+import type { SendUsage } from "@/server/outbound/usage";
 import type { PublicSite } from "@/server/repositories/public-repository";
 import type {
   AppointmentDetails,
+  BlockedMessage,
   ConversationDetails,
   ConversationSummary,
   MessageView,
@@ -169,4 +179,49 @@ export function conversationDto(conversation: ConversationDetails) {
 
 export function pageDto<T, R>(page: Page<T>, map: (item: T) => R) {
   return { items: page.items.map(map), page: page.page, pageSize: page.pageSize, hasMore: page.hasMore };
+}
+
+// Uso do dia e aquecimento (D6): só números e datas, sem contador de outro tenant.
+export function sendUsageDto(usage: SendUsage) {
+  return {
+    configured: usage.configured,
+    day: usage.day,
+    timezone: usage.timezone,
+    used: usage.used,
+    limit: usage.limit,
+    manualLimit: usage.manualLimit,
+    warmup: { ...usage.warmup },
+  };
+}
+
+// Envio bloqueado (D6, D8): motivo em código (a tela traduz), sem chave de idempotência nem id externo.
+export function blockedMessageDto(message: BlockedMessage) {
+  return {
+    id: message.id,
+    messageType: message.messageType,
+    channel: message.channel,
+    reason: message.blockReason,
+    scheduledFor: message.scheduledFor,
+    createdAt: message.createdAt,
+    blockedAt: message.blockedAt,
+    contact: message.contact,
+  };
+}
+
+// Template (D5, D16): o tipo é da lista fechada e não muda; junto vão as variáveis aceitas e os
+// limites, para a tela validar antes de enviar, e se ainda é o texto padrão.
+export function messageTemplateDto(template: MessageTemplate) {
+  const type = template.messageType as OutboundMessageType;
+  const defaults = DEFAULT_TEMPLATES[type];
+  return {
+    id: template.id,
+    messageType: type,
+    variations: template.variations,
+    active: template.active,
+    variables: [...TEMPLATE_VARIABLES[type]],
+    isDefault:
+      template.variations.length === defaults.length && template.variations.every((text, i) => text === defaults[i]),
+    limits: { minVariations: MIN_VARIATIONS, maxVariations: MAX_VARIATIONS, maxLength: MAX_VARIATION_LENGTH },
+    updatedAt: template.updatedAt,
+  };
 }

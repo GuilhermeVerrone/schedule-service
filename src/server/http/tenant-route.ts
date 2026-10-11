@@ -7,6 +7,8 @@ import { errorResponse, readJson, validationErrorResponse } from "@/server/http/
 import { NotBookableError, SlotUnavailableError } from "@/server/agenda/booking";
 import { AlreadyConnectedError, NoConnectionError } from "@/server/messaging/connection";
 import { WhatsAppProviderError } from "@/server/whatsapp";
+import { TemplateValidationError, UnknownMessageTypeError } from "@/server/outbound/templates";
+import { templateIssueMessage } from "@/server/validation/outbound-api";
 import {
   AppointmentConflictError,
   AppointmentStatusError,
@@ -35,6 +37,8 @@ export const NOT_FOUND = {
   timeBlock: "Bloqueio não encontrado.",
   conversation: "Conversa não encontrada.",
   whatsappConnection: "Nenhuma conexão do WhatsApp. Conecte pelo QR code.",
+  template: "Template não encontrado.",
+  business: "Negócio não encontrado.",
 } as const;
 
 const STATUS_LABEL = { confirmed: "confirmado", canceled: "cancelado", completed: "concluído" } as const;
@@ -82,6 +86,15 @@ export function tenantRoute<P = Record<string, never>>(handler: Handler<P>) {
       }
       if (error instanceof AppointmentStatusError) {
         return errorResponse(409, "invalid_status", `Esse agendamento já está ${STATUS_LABEL[error.status]}.`);
+      }
+      // Variações do template (D5): a primeira vira a mensagem; todas vão em `issues` com a posição.
+      if (error instanceof TemplateValidationError) {
+        const issues = error.issues.map((issue) => ({ ...issue, message: templateIssueMessage(issue) }));
+        return errorResponse(400, "invalid_template", issues[0].message, issues);
+      }
+      // Tipo fora da lista fechada (D16) nunca chega do cliente; se chegar, é entrada inválida.
+      if (error instanceof UnknownMessageTypeError) {
+        return errorResponse(400, "invalid_input", "Tipo de mensagem inválido.");
       }
       if (error instanceof NotBookableError) return errorResponse(422, "not_bookable", error.message);
       if (error instanceof NoConnectionError) return errorResponse(404, "not_found", NOT_FOUND.whatsappConnection);

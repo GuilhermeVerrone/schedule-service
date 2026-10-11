@@ -157,6 +157,9 @@ describe("cobertura", () => {
       .filter((route) => !["/api/whatsapp", "/api/conversations", "/api/webhooks"].some((p) => route.startsWith(p)))
       // A rota de saúde (fila-envio-limites-elegibilidade) é pública e testada em tests/health-route.test.ts.
       .filter((route) => route !== "/api/health")
+      // Templates de mensagem (fila-envio-limites-elegibilidade) têm a própria tabela em
+      // tests/outbound-panel-api.test.ts.
+      .filter((route) => !route.startsWith("/api/message-templates"))
       .sort();
     expect(routes).toEqual(Object.keys(AGENDA_ROUTES).sort());
   });

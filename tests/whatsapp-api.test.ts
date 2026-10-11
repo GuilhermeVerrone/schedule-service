@@ -178,6 +178,9 @@ describe("cobertura e proxy", () => {
       .filter((file) => file.split(sep).at(-1) === "route.ts")
       .map((file) => ["/api", ...file.split(sep).slice(0, -1)].join("/"))
       .filter((route) => ["/api/whatsapp", "/api/conversations", "/api/webhooks"].some((p) => route.startsWith(p)))
+      // Uso do dia e bloqueios (fila-envio-limites-elegibilidade) têm a própria tabela em
+      // tests/outbound-panel-api.test.ts.
+      .filter((route) => !["/api/whatsapp/usage", "/api/whatsapp/blocked"].includes(route))
       .sort();
     expect(routes).toEqual(Object.keys(ROUTES).sort());
   });

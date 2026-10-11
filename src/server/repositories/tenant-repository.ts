@@ -30,7 +30,7 @@ export type { ConsentInput } from "./tenant/contacts";
 export type { EligibilityFacts, OptOutConfirmationFacts } from "./tenant/eligibility";
 export type { SendCounterState } from "./tenant/send-counter";
 export type { ChosenVariation } from "./tenant/message-templates";
-export type { OutboundCreateInput, OutboundSentInput } from "./tenant/outbound-messages";
+export type { BlockedMessage, OutboundCreateInput, OutboundSentInput } from "./tenant/outbound-messages";
 export {
   AppointmentConflictError,
   AppointmentStatusError,

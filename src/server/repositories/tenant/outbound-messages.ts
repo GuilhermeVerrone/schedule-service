@@ -1,6 +1,8 @@
-import type { OutboundMessage } from "@/generated/prisma/client";
+import type { Contact, OutboundMessage } from "@/generated/prisma/client";
 import type { OutboundMessageType } from "@/server/outbound/message-types";
+import { pageSchema, WHATSAPP_PAGE_SIZE } from "@/server/validation/whatsapp";
 import { byId, contactExists, isId, type TenantScope } from "../shared";
+import type { Page } from "./conversations";
 
 // Registro de envios do tenant (guia 5; D7, D10, D12). Cada linha nasce `queued` pela chave de
 // idempotência (única por tenant) e só sai de `queued` uma vez: toda transição tem `status:
@@ -31,6 +33,13 @@ export type OutboundSentInput =
     })
   // Fallback por e-mail (Fase 8): a conversa é a do WhatsApp, então o e-mail não entra nela.
   | (SentCommon & { channel: "email" });
+
+// Envio bloqueado visto pelo painel (D6, D8): motivo e contato, sem chave de idempotência nem id
+// externo. O momento do bloqueio é o `updated_at` (a linha só sai de `queued` uma vez).
+export interface BlockedMessage extends Pick<OutboundMessage, "id" | "messageType" | "channel" | "blockReason" | "scheduledFor" | "createdAt"> {
+  blockedAt: Date;
+  contact: Pick<Contact, "id" | "name" | "phone">;
+}
 
 export function createOutboundMessagesRepository({ tenantId, db }: TenantScope) {
   // Sai de `queued` para o desfecho; false se já tinha desfecho (ou não é do tenant).
@@ -63,6 +72,34 @@ export function createOutboundMessagesRepository({ tenantId, db }: TenantScope) 
 
     findById(id: string): Promise<OutboundMessage | null> {
       return byId(id, () => db.outboundMessage.findFirst({ where: { id, tenantId } }));
+    },
+
+    // Bloqueios do tenant, mais recente primeiro, 50 por página (lê uma linha a mais para saber
+    // se há próxima página).
+    async listBlocked(page?: number): Promise<Page<BlockedMessage>> {
+      const current = pageSchema.parse(page);
+      const rows = await db.outboundMessage.findMany({
+        where: { tenantId, status: "blocked" },
+        select: {
+          id: true,
+          messageType: true,
+          channel: true,
+          blockReason: true,
+          scheduledFor: true,
+          createdAt: true,
+          updatedAt: true,
+          contact: { select: { id: true, name: true, phone: true } },
+        },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        skip: (current - 1) * WHATSAPP_PAGE_SIZE,
+        take: WHATSAPP_PAGE_SIZE + 1,
+      });
+      return {
+        items: rows.slice(0, WHATSAPP_PAGE_SIZE).map(({ updatedAt, ...row }) => ({ ...row, blockedAt: updatedAt })),
+        page: current,
+        pageSize: WHATSAPP_PAGE_SIZE,
+        hasMore: rows.length > WHATSAPP_PAGE_SIZE,
+      };
     },
 
     findByKey(idempotencyKey: string): Promise<OutboundMessage | null> {
