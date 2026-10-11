@@ -1,6 +1,9 @@
 import { writeFile } from "node:fs/promises";
 import { QueueEvents, Worker } from "bullmq";
 import type { Redis } from "ioredis";
+import { OUTBOUND_QUEUE } from "@/server/outbound/queue";
+import { createOutboundWorker, type SendOutcome } from "@/server/outbound/worker";
+import type { OutboundJobData } from "@/server/outbound/queue";
 import { createProducerConnection, createWorkerConnection, redisUrl } from "@/server/queue/connection";
 import {
   createSystemQueue,
@@ -10,6 +13,7 @@ import {
   type PingData,
   type PingResult,
 } from "@/server/queue/system-queue";
+import { getWhatsAppProvider } from "@/server/whatsapp";
 import { HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS } from "./heartbeat";
 
 // Núcleo do worker (D2): processo separado, mesma imagem do app, sem nada do Next (headers,
@@ -24,6 +28,8 @@ export const jsonLog: WorkerLog = (event, fields = {}) => {
 
 export type WorkerHandle = {
   worker: Worker<PingData, PingResult>;
+  // Fila de envio (Fase 6): único lugar que chama sendText.
+  outbound: Worker<OutboundJobData, SendOutcome>;
   // Worker rodando e Redis respondendo ao PING.
   isHealthy: () => Promise<boolean>;
   close: () => Promise<void>;
@@ -37,13 +43,17 @@ export async function startWorker(url: string = redisUrl(), log: WorkerLog = jso
   worker.on("failed", (job, error) =>
     log("job_failed", { queue: SYSTEM_QUEUE, job: job?.name, id: job?.id, error: error.message }),
   );
-  await worker.waitUntilReady();
-  log("worker_ready", { queues: [SYSTEM_QUEUE] });
+  const outbound = createOutboundWorker({ connection, provider: getWhatsAppProvider(), log });
+  outbound.on("failed", (job, error) =>
+    log("job_failed", { queue: OUTBOUND_QUEUE, id: job?.id, attempts: job?.attemptsMade, error: error.name }),
+  );
+  await Promise.all([worker.waitUntilReady(), outbound.waitUntilReady()]);
+  log("worker_ready", { queues: [SYSTEM_QUEUE, OUTBOUND_QUEUE] });
 
   let closing: Promise<void> | undefined;
   const close = () => {
     closing ??= (async () => {
-      await worker.close();
+      await Promise.all([worker.close(), outbound.close()]);
       await connection.quit().catch(() => connection.disconnect());
       log("worker_closed");
     })();
@@ -52,13 +62,13 @@ export async function startWorker(url: string = redisUrl(), log: WorkerLog = jso
   // Com o Redis fora do ar o PING desta conexão espera (maxRetriesPerRequest nulo): o prazo evita
   // checagens acumuladas e o batimento simplesmente para.
   const isHealthy = async () => {
-    if (!worker.isRunning()) return false;
+    if (!worker.isRunning() || !outbound.isRunning()) return false;
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), 2_000)));
     const pong = connection.ping().then((reply) => reply === "PONG", () => false);
     return Promise.race([pong, timeout]).finally(() => clearTimeout(timer));
   };
-  return { worker, isHealthy, close };
+  return { worker, outbound, isHealthy, close };
 }
 
 // Enfileira um ping e espera o resultado: usado pelo smoke test e pelos testes de integração.

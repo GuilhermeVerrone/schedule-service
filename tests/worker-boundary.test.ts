@@ -31,6 +31,12 @@ export function workerImportGraph(entries: string[]): { files: string[]; package
     seen.add(file);
     for (const match of readFileSync(file, "utf8").matchAll(IMPORT)) {
       const spec = match[1] ?? match[2] ?? match[3];
+      // Client gerado do Prisma (o worker usa o banco pelos repositórios, Fase 6): conta como
+      // pacote, sem descer nele.
+      if (spec.startsWith("@/generated/")) {
+        packages.set(spec, relative(root, file));
+        continue;
+      }
       const local = resolveLocal(file, spec);
       if (local) queue.push(local);
       else packages.set(spec, relative(root, file));
