@@ -8,13 +8,15 @@ import { LoadError } from "@/components/painel/catalog/states";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { QrCode } from "./qr-code";
+import { SendUsageSection } from "./send-usage-section";
 import { useConnection } from "./use-connection";
 import { runConnectionAction, type ConnectionAction, type ConnectionDto, type ConnectionStatus, type PairingQrDto } from "./whatsapp-api";
 
 // /painel/whatsapp (guia 3, 7a, 7b, 7e): conectar lendo o QR, ver o estado, alerta de queda,
 // reconectar e desconectar, com o aviso de risco do WhatsApp não oficial sempre à vista.
 // Celular: uma coluna (estado, depois os cuidados). Desktop: estado nas colunas 1 a 7 e os
-// cuidados nas 8 a 12. Nenhuma tela desta fatia envia mensagem (D5).
+// cuidados nas 8 a 12. Nenhuma tela desta fatia envia mensagem (D5). Abaixo, o bloco só leitura
+// de uso do dia, aquecimento e envios bloqueados (fila-envio-limites-elegibilidade, D6).
 
 const PANEL = "rounded-frame border border-line bg-surface p-[clamp(1.25rem,1rem+1.2vw,2rem)]";
 
@@ -69,6 +71,7 @@ export function WhatsAppScreen() {
         </section>
         <RiskNotice className="lg:col-span-5" />
       </div>
+      <SendUsageSection />
     </PageFrame>
   );
 }
