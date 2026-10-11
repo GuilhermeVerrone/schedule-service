@@ -3,7 +3,10 @@ import { LOGIN_PATH } from "@/server/auth/redirects";
 // Chamadas das telas do painel às rotas de profissionais, serviços e horários (Fase 4) e leitura
 // do erro padrão (D7). Sessão vencida (401) leva ao login guardando a tela atual em ?next=.
 
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; code: string; message: string };
+// `issues`: problemas por campo que algumas rotas mandam junto do erro (ex.: variações de um template).
+export type ApiResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; status: number; code: string; message: string; issues?: unknown[] };
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -46,9 +49,10 @@ export async function apiRequest<T = void>(method: Method, path: string, body?: 
   }
 
   try {
-    const { error } = (await response.json()) as { error?: { code?: string; message?: string } };
+    const { error } = (await response.json()) as { error?: { code?: string; message?: string; issues?: unknown } };
     if (error?.code && error.message) {
-      return { ok: false, status: response.status, code: error.code, message: error.message };
+      const issues = Array.isArray(error.issues) ? { issues: error.issues } : {};
+      return { ok: false, status: response.status, code: error.code, message: error.message, ...issues };
     }
   } catch {
     // corpo fora do padrão: cai na mensagem genérica abaixo

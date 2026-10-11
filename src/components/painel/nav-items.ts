@@ -2,6 +2,7 @@
 // ficam dentro de cada profissional (/painel/profissionais/[id]/horarios). Configurações do
 // negócio e da agenda na Fatia 2 (agenda-link-publico, Fase 6); a agenda do dia e da semana na Fase 7.
 // Conexão do WhatsApp e conversas na Fatia 3 (whatsapp-conexao-mensagens, Fases 6 e 7).
+// Textos das mensagens automáticas na Fatia 4 (fila-envio-limites-elegibilidade, Fase 11).
 export const PANEL_NAV = [
   { href: "/painel", label: "Início", exact: true },
   { href: "/painel/agenda", label: "Agenda", exact: false },
@@ -9,5 +10,6 @@ export const PANEL_NAV = [
   { href: "/painel/servicos", label: "Serviços", exact: false },
   { href: "/painel/conversas", label: "Conversas", exact: false },
   { href: "/painel/whatsapp", label: "WhatsApp", exact: false },
+  { href: "/painel/mensagens", label: "Mensagens", exact: false },
   { href: "/painel/configuracoes", label: "Configurações", exact: false },
 ] as const;
