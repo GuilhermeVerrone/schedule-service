@@ -15,16 +15,22 @@ export interface OutboundCreateInput {
   scheduledFor: Date;
 }
 
-export interface OutboundSentInput {
-  channel: "whatsapp";
+interface SentCommon {
   externalId: string;
   sentAt: Date;
   templateVariant: number;
-  // Texto montado, gravado só na conversa.
-  body: string;
-  // Estado devolvido pelo provedor (`messages.status`).
-  deliveryState: "pending" | "sent";
 }
+
+export type OutboundSentInput =
+  | (SentCommon & {
+      channel: "whatsapp";
+      // Texto montado, gravado só na conversa.
+      body: string;
+      // Estado devolvido pelo provedor (`messages.status`).
+      deliveryState: "pending" | "sent";
+    })
+  // Fallback por e-mail (Fase 8): a conversa é a do WhatsApp, então o e-mail não entra nela.
+  | (SentCommon & { channel: "email" });
 
 export function createOutboundMessagesRepository({ tenantId, db }: TenantScope) {
   // Sai de `queued` para o desfecho; false se já tinha desfecho (ou não é do tenant).
@@ -76,8 +82,8 @@ export function createOutboundMessagesRepository({ tenantId, db }: TenantScope) 
       return finish(id, { status: "failed" });
     },
 
-    // Envio concluído: marca `sent` e grava a mensagem na conversa do contato (direction
-    // `outbound`), numa transação. Se a linha já tinha desfecho, nada é gravado (false).
+    // Envio concluído: marca `sent` e, no WhatsApp, grava a mensagem na conversa do contato
+    // (direction `outbound`), numa transação. Se a linha já tinha desfecho, nada é gravado (false).
     async markSent(id: string, input: OutboundSentInput): Promise<boolean> {
       if (!isId(id)) return false;
       return db.$transaction(async (tx) => {
@@ -103,6 +109,7 @@ export function createOutboundMessagesRepository({ tenantId, db }: TenantScope) 
             data: { optOutConfirmationSentAt: input.sentAt },
           });
         }
+        if (input.channel !== "whatsapp") return true;
         const conversation = await tx.conversation.upsert({
           where: { tenantId_contactId: { tenantId, contactId } },
           create: { tenantId, contactId, lastMessageAt: input.sentAt },

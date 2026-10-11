@@ -1,14 +1,19 @@
+import { createHash } from "node:crypto";
 import { DelayedError, UnrecoverableError, Worker, type Job } from "bullmq";
 import type { Redis } from "ioredis";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { isId } from "@/server/repositories/shared";
+import type { OutboundSentInput } from "@/server/repositories/tenant/outbound-messages";
 import { createTenantRepository, type TenantRepository } from "@/server/repositories/tenant-repository";
+import { fromAddress, getEmailProvider, isEmailError, type EmailProvider } from "@/server/email";
 import { WhatsAppProviderError, type WhatsAppProvider } from "@/server/whatsapp";
-import { buildMessageContent } from "./content";
+import { buildMessageContent, type MessageContent } from "./content";
+import { emailSubject } from "./email-content";
 import { isContactEligibleForProactive, isOptOutConfirmationAllowed } from "./eligibility";
 import { isMessageType } from "./templates";
 import { OUTBOUND_QUEUE, retryDelayMs, RETRY_DELAYS_MS, type OutboundJobData } from "./queue";
-import { evaluateSendPolicy, nextSendAllowedAt, type SendDecision } from "./send-policy";
+import type { OutboundMessageType } from "./message-types";
+import { evaluateEmailSendPolicy, evaluateSendPolicy, nextSendAllowedAt, type SendDecision } from "./send-policy";
 import { createTenantThrottle, type TenantThrottle } from "./tenant-throttle";
 
 // Worker da fila de envio (guia 6, 7a, 7b, 7e; D3, D7, D10, D12). Único lugar do produto que
@@ -16,14 +21,18 @@ import { createTenantThrottle, type TenantThrottle } from "./tenant-throttle";
 //   1. valida o tenantId no banco: a linha do envio tem de existir nesse tenant;
 //   2. linha que já saiu de `queued` não envia de novo (evento duplicado, job repetido);
 //   3. elegibilidade (bloqueio com motivo; a confirmação de opt-out tem a regra da D15) e conteúdo do template (bloqueio com motivo);
-//   4. trava do número (um envio por tenant por vez; outros tenants seguem em paralelo);
-//   5. política: expira, adia (teto, janela, intervalo) ou envia; a vaga do teto é consumida no
+//   4. canal (Fase 8; guia 7d, D8): WhatsApp `connected` segue abaixo; conexão caída, ausente ou
+//      `banned_suspected` vai por e-mail (contato sem e-mail: `blocked`/`no_channel`), só com a
+//      expiração e a janela da política (teto, aquecimento e intervalo são do número);
+//   5. trava do número (um envio por tenant por vez; outros tenants seguem em paralelo);
+//   6. política: expira, adia (teto, janela, intervalo) ou envia; a vaga do teto é consumida no
 //      banco antes do envio e devolvida se o envio falhar, então retentativa não gasta o teto;
-//   6. `sendText` pelo adapter e registro em `outbound_messages` e na conversa.
-// Falha do provedor ou do banco: retentativa em 1, 5 e 15 min; esgotadas, `failed`.
+//   7. `sendText` pelo adapter e registro em `outbound_messages` e na conversa.
+// Falha do provedor ou do banco: retentativa em 1, 5 e 15 min; esgotadas, `failed`. O canal é
+// escolhido de novo a cada tentativa: o WhatsApp que voltou é usado na retentativa seguinte.
 
 export type SendOutcome =
-  | { outcome: "sent"; externalId: string }
+  | { outcome: "sent"; channel: "whatsapp" | "email"; externalId: string }
   | { outcome: "blocked"; reason: string }
   | { outcome: "expired" }
   | { outcome: "skipped"; status: string }
@@ -33,6 +42,10 @@ export type OutboundLog = (event: string, fields?: Record<string, unknown>) => v
 
 export interface OutboundProcessorDeps {
   provider: WhatsAppProvider;
+  // Canal de reserva (Fase 8); padrão: o provedor da env EMAIL_PROVIDER.
+  email?: EmailProvider;
+  // Domínio do remetente; padrão: EMAIL_FROM_DOMAIN.
+  emailFromDomain?: string;
   throttle: TenantThrottle;
   db?: PrismaClient;
   now?: () => Date;
@@ -55,17 +68,26 @@ async function defer(job: Job<OutboundJobData>, token: string | undefined, until
 
 const isLastAttempt = (job: Job<OutboundJobData>): boolean => job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 
+// Sorteio fixo por envio: a retentativa de um e-mail escolhe a mesma variação e manda o mesmo
+// conteúdo com a mesma chave de idempotência (o provedor recusa a chave com outro conteúdo).
+function seededRandom(seed: string): () => number {
+  const value = createHash("sha256").update(seed).digest().readUInt32BE(0) / 2 ** 32;
+  return () => value;
+}
+
+type OutboundRow = { id: string; contactId: string; messageType: string; scheduledFor: Date };
+
 export function createOutboundProcessor(deps: OutboundProcessorDeps) {
   const now = deps.now ?? (() => new Date());
   const log = deps.log ?? silentLog;
   const nextSendAt = deps.nextSendAt ?? ((sentAt: Date) => nextSendAllowedAt(sentAt, deps.random));
 
-  // Etapas 3 a 6. Lança para retentar; DelayedError para adiar.
+  // Etapas 3 a 7. Lança para retentar; DelayedError para adiar.
   async function attempt(
     job: Job<OutboundJobData>,
     token: string | undefined,
     repo: TenantRepository,
-    message: { id: string; contactId: string; messageType: string; scheduledFor: Date },
+    message: OutboundRow,
   ): Promise<SendOutcome> {
     const { tenantId } = job.data;
     if (!isMessageType(message.messageType)) {
@@ -95,10 +117,10 @@ export function createOutboundProcessor(deps: OutboundProcessorDeps) {
       return { outcome: "blocked", reason: content.reason };
     }
 
-    // Sem conexão ativa não há como enviar agora: retentativa (o e-mail entra na Fase 8).
+    // WhatsApp fora (caído, sem conexão ou `banned_suspected`): reserva por e-mail (D8).
     const [connection, counter] = await Promise.all([repo.whatsappConnection.get(), repo.sendCounter.getState()]);
     if (!connection || !counter || connection.status !== "connected") {
-      throw new WhatsAppProviderError("not_connected", "Sessão do WhatsApp não está conectada.");
+      return sendByEmail(job, token, repo, message, type, content);
     }
 
     const lock = await deps.throttle.acquire(tenantId);
@@ -143,30 +165,93 @@ export function createOutboundProcessor(deps: OutboundProcessorDeps) {
       }
       const sentAt = now();
       await deps.throttle.setNotBefore(tenantId, nextSendAt(sentAt));
-      const sent = {
-        channel: "whatsapp" as const,
+      await recordSent(repo, tenantId, message.id, {
+        channel: "whatsapp",
         externalId: result.externalId,
         sentAt,
         templateVariant: chosen.variant,
         body: text,
         deliveryState: result.state,
-      };
-      try {
-        await repo.outboundMessages.markSent(message.id, sent);
-      } catch {
-        // Já saiu pelo WhatsApp: nunca retentar (seria envio duplicado). Uma segunda gravação; se
-        // também falhar, fica no log para conferência manual.
-        try {
-          await repo.outboundMessages.markSent(message.id, sent);
-        } catch {
-          log("outbound_sent_not_recorded", { tenantId, outboundMessageId: message.id });
-          throw new UnrecoverableError("sent_not_recorded");
-        }
-      }
-      return { outcome: "sent", externalId: result.externalId };
+      });
+      return { outcome: "sent", channel: "whatsapp", externalId: result.externalId };
     } finally {
       await deps.throttle.release(tenantId, lock);
     }
+  }
+
+  // Já saiu pelo canal: nunca retentar (seria envio duplicado). Uma segunda gravação; se também
+  // falhar, fica no log para conferência manual.
+  async function recordSent(repo: TenantRepository, tenantId: string, id: string, sent: OutboundSentInput) {
+    try {
+      await repo.outboundMessages.markSent(id, sent);
+    } catch {
+      try {
+        await repo.outboundMessages.markSent(id, sent);
+      } catch {
+        log("outbound_sent_not_recorded", { tenantId, outboundMessageId: id, channel: sent.channel });
+        throw new UnrecoverableError("sent_not_recorded");
+      }
+    }
+  }
+
+  // Fallback por e-mail (Fase 8). A elegibilidade e o opt-out já passaram (valem para qualquer
+  // canal); sem trava do número nem teto. Erro definitivo do provedor (destinatário recusado,
+  // chave repetida com outro conteúdo) vira `failed` sem retentativa.
+  async function sendByEmail(
+    job: Job<OutboundJobData>,
+    token: string | undefined,
+    repo: TenantRepository,
+    message: OutboundRow,
+    type: OutboundMessageType,
+    content: Extract<MessageContent, { ok: true }>,
+  ): Promise<SendOutcome> {
+    const { tenantId } = job.data;
+    if (!content.email) {
+      await repo.outboundMessages.markBlocked(message.id, "no_channel");
+      return { outcome: "blocked", reason: "no_channel" };
+    }
+    const decision = evaluateEmailSendPolicy({
+      messageType: type,
+      dueAt: message.scheduledFor,
+      now: now(),
+      timezone: content.timezone,
+    });
+    if (decision.action === "expire") {
+      await repo.outboundMessages.markExpired(message.id);
+      return { outcome: "expired" };
+    }
+    if (decision.action === "defer") {
+      log("outbound_deferred", { tenantId, outboundMessageId: message.id, reason: decision.reason, channel: "email" });
+      return defer(job, token, decision.until);
+    }
+
+    const email = deps.email ?? getEmailProvider();
+    const from = fromAddress(content.businessName, deps.emailFromDomain ?? process.env.EMAIL_FROM_DOMAIN ?? "");
+    const chosen = await repo.messageTemplates.chooseFor(message.contactId, type, deps.random ?? seededRandom(message.id));
+    let result;
+    try {
+      result = await email.send({
+        from,
+        to: content.email,
+        subject: emailSubject(type, content.businessName),
+        text: content.render(chosen.text),
+        idempotencyKey: `outbound:${message.id}`,
+      });
+    } catch (error) {
+      if (isEmailError(error) && !error.retryable) {
+        log("outbound_email_rejected", { tenantId, outboundMessageId: message.id, error: error.code });
+        await repo.outboundMessages.markFailed(message.id);
+        throw new UnrecoverableError(error.code);
+      }
+      throw error;
+    }
+    await recordSent(repo, tenantId, message.id, {
+      channel: "email",
+      externalId: result.externalId,
+      sentAt: now(),
+      templateVariant: chosen.variant,
+    });
+    return { outcome: "sent", channel: "email", externalId: result.externalId };
   }
 
   return async function process(job: Job<OutboundJobData>, token?: string): Promise<SendOutcome> {
@@ -194,7 +279,12 @@ export function createOutboundProcessor(deps: OutboundProcessorDeps) {
         outboundMessageId,
         attempt: job.attemptsMade + 1,
         final: last,
-        error: error instanceof WhatsAppProviderError ? error.code : error instanceof Error ? error.name : "unknown",
+        error:
+          error instanceof WhatsAppProviderError || isEmailError(error)
+            ? error.code
+            : error instanceof Error
+              ? error.name
+              : "unknown",
       });
       if (last) await repo.outboundMessages.markFailed(outboundMessageId);
       throw error;

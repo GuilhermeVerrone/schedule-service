@@ -9,8 +9,16 @@ import { renderTemplate, type TemplateVariables } from "./templates";
 export type ContentBlockReason = "contact_not_found" | "tenant_not_found" | "appointment_not_found" | "appointment_not_confirmed";
 
 export type MessageContent =
-  // `render` monta o texto final de uma variação com as variáveis do tipo (texto puro).
-  | { ok: true; phone: string; render: (text: string) => string }
+  // `render` monta o texto final de uma variação com as variáveis do tipo (texto puro). `email`,
+  // `businessName` e `timezone` servem ao fallback por e-mail (Fase 8).
+  | {
+      ok: true;
+      phone: string;
+      email: string | null;
+      businessName: string;
+      timezone: string;
+      render: (text: string) => string;
+    }
   | { ok: false; reason: ContentBlockReason };
 
 type ContentRepo = Pick<TenantRepository, "tenant" | "contacts" | "appointments">;
@@ -29,10 +37,16 @@ export async function buildMessageContent(
   if (!tenant) return { ok: false, reason: "tenant_not_found" };
   if (!contact) return { ok: false, reason: "contact_not_found" };
   const base = { nome: displayName(contact.name), negocio: tenant.name };
+  const target = {
+    phone: contact.phone,
+    email: contact.email?.trim() || null,
+    businessName: tenant.name,
+    timezone: tenant.timezone,
+  };
 
   if (type === "optout_confirmation") {
     const variables: TemplateVariables<"optout_confirmation"> = base;
-    return { ok: true, phone: contact.phone, render: (text) => renderTemplate(text, variables) };
+    return { ok: true, ...target, render: (text) => renderTemplate(text, variables) };
   }
 
   const appointment = appointmentId ? await repo.appointments.findById(appointmentId) : null;
@@ -46,5 +60,5 @@ export async function buildMessageContent(
     data: startsAt.toFormat("dd/MM/yyyy"),
     hora: startsAt.toFormat("HH:mm"),
   };
-  return { ok: true, phone: contact.phone, render: (text) => renderTemplate(text, variables) };
+  return { ok: true, ...target, render: (text) => renderTemplate(text, variables) };
 }

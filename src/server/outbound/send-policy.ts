@@ -159,3 +159,30 @@ export function evaluateSendPolicy(input: SendPolicyInput): SendDecision {
   if (input.notBefore && now < input.notBefore) return defer("interval", input.notBefore);
   return { action: "send", day, limit };
 }
+
+// Fallback por e-mail (Fase 8; guia 7d, D8): teto diário, aquecimento e intervalo protegem o
+// número do WhatsApp e não se aplicam ao e-mail; a expiração de 24 h (D7) e a janela das 8h às
+// 20h (D11, com a mesma exceção da confirmação de agendamento) valem para qualquer canal.
+export interface EmailSendPolicyInput {
+  messageType: OutboundMessageType;
+  dueAt: Date;
+  now: Date;
+  timezone: string;
+}
+
+export type EmailSendDecision =
+  | { action: "send" }
+  | { action: "defer"; reason: "outside_window"; until: Date }
+  | { action: "expire"; reason: "expired" };
+
+export function evaluateEmailSendPolicy({ messageType, dueAt, now, timezone }: EmailSendPolicyInput): EmailSendDecision {
+  const expiresAt = dueAt.getTime() + SEND_EXPIRY_MS;
+  if (now.getTime() > expiresAt) return { action: "expire", reason: "expired" };
+  if (!TYPE_POLICY[messageType].windowExempt && !isWithinSendWindow(now, timezone)) {
+    const until = nextWindowOpen(now, timezone);
+    return until.getTime() > expiresAt
+      ? { action: "expire", reason: "expired" }
+      : { action: "defer", reason: "outside_window", until };
+  }
+  return { action: "send" };
+}

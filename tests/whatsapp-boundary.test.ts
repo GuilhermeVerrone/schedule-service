@@ -83,6 +83,7 @@ describe("segredos fora do repositório", () => {
     "AKG_API_KEY",
     "AKG_BASE_URL",
     "WHATSAPP_WEBHOOK_SECRET",
+    "RESEND_API_KEY",
     "DATABASE_URL",
     "DIRECT_URL",
     "TEST_DATABASE_URL",

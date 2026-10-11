@@ -13,6 +13,7 @@ import {
   type PingData,
   type PingResult,
 } from "@/server/queue/system-queue";
+import { getEmailProvider } from "@/server/email";
 import { getWhatsAppProvider } from "@/server/whatsapp";
 import { HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS } from "./heartbeat";
 
@@ -43,7 +44,8 @@ export async function startWorker(url: string = redisUrl(), log: WorkerLog = jso
   worker.on("failed", (job, error) =>
     log("job_failed", { queue: SYSTEM_QUEUE, job: job?.name, id: job?.id, error: error.message }),
   );
-  const outbound = createOutboundWorker({ connection, provider: getWhatsAppProvider(), log });
+  // E-mail (Fase 8): canal de reserva do WhatsApp; em produção EMAIL_PROVIDER é obrigatória.
+  const outbound = createOutboundWorker({ connection, provider: getWhatsAppProvider(), email: getEmailProvider(), log });
   outbound.on("failed", (job, error) =>
     log("job_failed", { queue: OUTBOUND_QUEUE, id: job?.id, attempts: job?.attemptsMade, error: error.name }),
   );
