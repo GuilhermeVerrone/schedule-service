@@ -19,6 +19,7 @@
     "db:check": "tsx scripts/check-db.ts",
     "db:migrate": "prisma migrate dev",
     "check:tenant-access": "tsx scripts/check-tenant-access.ts",
+    "templates:backfill": "tsx scripts/backfill-message-templates.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

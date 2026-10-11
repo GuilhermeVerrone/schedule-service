@@ -6,6 +6,7 @@ import { createContactsRepository } from "./tenant/contacts";
 import { createEligibilityRepository } from "./tenant/eligibility";
 import { createConversationsRepository } from "./tenant/conversations";
 import { createMessagesRepository } from "./tenant/messages";
+import { createMessageTemplatesRepository } from "./tenant/message-templates";
 import { createSendCounterRepository } from "./tenant/send-counter";
 import { createProfessionalServicesRepository } from "./tenant/professional-services";
 import { createProfessionalsRepository } from "./tenant/professionals";
@@ -27,6 +28,7 @@ export type { AgendaSettings } from "./tenant/settings";
 export type { ConsentInput } from "./tenant/contacts";
 export type { EligibilityFacts } from "./tenant/eligibility";
 export type { SendCounterState } from "./tenant/send-counter";
+export type { ChosenVariation } from "./tenant/message-templates";
 export {
   AppointmentConflictError,
   AppointmentStatusError,
@@ -66,6 +68,7 @@ export function createTenantRepository(tenantId: string, db: PrismaClient = pris
     sendCounter: createSendCounterRepository(scope),
     conversations: createConversationsRepository(scope),
     messages: createMessagesRepository(scope),
+    messageTemplates: createMessageTemplatesRepository(scope),
   };
 }
 

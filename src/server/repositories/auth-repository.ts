@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import type { Tenant, User } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { createDefaultTemplates } from "./tenant/message-templates";
 
 // Acesso pré-autenticação (D1, premissas a-e). Aqui o tenant ainda não é conhecido: o login
 // busca o usuário pelo e-mail (único globalmente) e a sessão pelo hash do token. Depois disso
@@ -82,7 +83,7 @@ export function createAuthRepository(db: PrismaClient = prisma) {
       return rows.map((row) => row.slug);
     },
 
-    // Tenant, dono e primeira sessão nascem juntos ou nenhum nasce (premissa b).
+    // Tenant, dono, primeira sessão e templates padrão (D5) nascem juntos ou nenhum nasce (premissa b).
     async createOwnerAccount(input: NewOwnerAccount): Promise<Profile & { session: SessionRecord }> {
       try {
         return await db.$transaction(async (tx) => {
@@ -98,6 +99,7 @@ export function createAuthRepository(db: PrismaClient = prisma) {
             data: { tenantId: tenant.id, userId: user.id, ...input.session },
             select: sessionFields,
           });
+          await createDefaultTemplates(tx, tenant.id);
           return { tenant, user, session };
         });
       } catch (error) {
