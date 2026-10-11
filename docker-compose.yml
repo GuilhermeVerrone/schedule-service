@@ -1,0 +1,95 @@
+# Slotz em Compose (D1, D2): app (Next), worker (BullMQ) e redis, a partir da mesma imagem.
+# Segredos vêm do .env (fora do Git): REDIS_PASSWORD e as variáveis do app (.env.example).
+# O Redis fica só na rede interna "backend" (internal: sem porta publicada e sem saída para a
+# internet), com senha, AOF ligado e noeviction (a fila nunca perde job por falta de memória).
+# Deploy na VPS (proxy, HTTPS, domínio, backup) é fase própria, fora daqui.
+name: slotz
+
+x-app-env: &app-env
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    NODE_ENV: production
+    REDIS_URL: redis://:${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}@redis:6379
+
+services:
+  redis:
+    image: redis:8-alpine
+    user: redis
+    command:
+      - sh
+      - -c
+      - >-
+        exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --appendfsync everysec
+        --maxmemory-policy noeviction --protected-mode yes
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}
+    volumes:
+      - redis-data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: .
+    image: slotz:local
+    <<: *app-env
+    init: true
+    ports:
+      # Só na máquina local; o acesso de fora vem pelo proxy reverso do deploy (fora desta fase).
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    networks:
+      - backend
+      - default
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    image: slotz:local
+    <<: *app-env
+    init: true
+    command: ["node", "--import", "tsx", "src/worker/main.ts"]
+    networks:
+      - backend
+      - default
+    depends_on:
+      redis:
+        condition: service_healthy
+      app:
+        # Só para a imagem já estar construída pelo serviço app.
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "--import", "tsx", "src/worker/healthcheck.ts"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+networks:
+  backend:
+    internal: true
+  default: {}
+
+volumes:
+  redis-data:

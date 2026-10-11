@@ -1,0 +1,27 @@
+# Redis local só para os testes de integração (Vitest): `pnpm redis:test:up`.
+# Porta presa em 127.0.0.1 (nunca exposta na rede), senha em TEST_REDIS_PASSWORD (.env), dados
+# em memória. Separado do docker-compose.yml, cujo Redis não tem porta publicada.
+name: slotz-test
+
+services:
+  redis-test:
+    image: redis:8-alpine
+    user: redis
+    command:
+      - sh
+      - -c
+      - >-
+        exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly no --save ""
+        --maxmemory-policy noeviction
+    environment:
+      REDIS_PASSWORD: ${TEST_REDIS_PASSWORD:?defina TEST_REDIS_PASSWORD no .env}
+      REDISCLI_AUTH: ${TEST_REDIS_PASSWORD:?defina TEST_REDIS_PASSWORD no .env}
+    ports:
+      - "127.0.0.1:${TEST_REDIS_PORT:-6380}:6379"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 2s
+      timeout: 2s
+      retries: 15

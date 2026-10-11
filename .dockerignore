@@ -1,0 +1,26 @@
+# Segredos nunca entram no contexto do build
+.env
+.env.*
+!.env.example
+
+# Gerados e locais (o client do Prisma é gerado dentro da imagem)
+node_modules
+.next
+src/generated
+*.tsbuildinfo
+.git
+.claude
+.vitest
+.playwright-mcp
+test-results
+playwright-report
+coverage
+
+# Fora do runtime
+docs
+e2e
+tests
+*.md
+!README.md
+docker-compose*.yml
+Dockerfile

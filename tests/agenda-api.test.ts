@@ -155,6 +155,8 @@ describe("cobertura", () => {
       .filter((route) => !route.startsWith("/api/public/"))
       // A API do WhatsApp (whatsapp-conexao-mensagens) tem a própria tabela em tests/whatsapp-api.test.ts.
       .filter((route) => !["/api/whatsapp", "/api/conversations", "/api/webhooks"].some((p) => route.startsWith(p)))
+      // A rota de saúde (fila-envio-limites-elegibilidade) é pública e testada em tests/health-route.test.ts.
+      .filter((route) => route !== "/api/health")
       .sort();
     expect(routes).toEqual(Object.keys(AGENDA_ROUTES).sort());
   });

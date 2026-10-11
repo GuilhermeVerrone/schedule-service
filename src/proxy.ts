@@ -33,6 +33,13 @@ export function isWebhookApi(pathname: string): boolean {
   return WEBHOOK_ROUTES.has(trimSlash(pathname));
 }
 
+// Saúde do app (D2, healthcheck do Compose): sem sessão e sem tocar no banco, como os webhooks.
+export const HEALTH_ROUTE = "/api/health";
+
+export function isHealthApi(pathname: string): boolean {
+  return trimSlash(pathname) === HEALTH_ROUTE;
+}
+
 // Primeiros segmentos que são do próprio Slotz e nunca de um site de negócio.
 const APP_SEGMENTS = new Set(["api", "painel", "login", "cadastro", "_next"]);
 
@@ -52,7 +59,8 @@ function isProtectedApi(pathname: string): boolean {
     (path === "/api" || path.startsWith("/api/")) &&
     !PUBLIC_API_ROUTES.has(path) &&
     !isPublicSiteApi(path) &&
-    !isWebhookApi(path)
+    !isWebhookApi(path) &&
+    !isHealthApi(path)
   );
 }
 
@@ -61,8 +69,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   headers.delete(TENANT_ID_HEADER);
   headers.delete(USER_ID_HEADER);
 
-  // Site público e webhooks: nem sessão, nem tenantId injetado (mesmo com o dono logado no navegador).
-  if (isPublicSiteApi(request.nextUrl.pathname) || isWebhookApi(request.nextUrl.pathname)) {
+  // Site público, webhooks e saúde: nem sessão, nem tenantId injetado (mesmo com o dono logado).
+  const { pathname: path } = request.nextUrl;
+  if (isPublicSiteApi(path) || isWebhookApi(path) || isHealthApi(path)) {
     return NextResponse.next({ request: { headers } });
   }
 
