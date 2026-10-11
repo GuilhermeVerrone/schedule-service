@@ -5,7 +5,7 @@ import { PUBLIC_NOT_FOUND, publicRoute } from "@/server/http/public-route";
 import { found, parseBody } from "@/server/http/tenant-route";
 import { publicBookingSchema } from "@/server/validation/public-api";
 
-// POST /api/public/:slug/appointments { serviceId, professionalId?, startsAt, customer, consent: true }:
+// POST /api/public/:slug/appointments { serviceId, professionalId?, startsAt, contact, consent: true }:
 // agenda pelo site (guia 7a). O cliente é reencontrado pelo telefone normalizado e o consentimento
 // fica registrado (D5). O token de gestão sai só nesta resposta (D6); o banco guarda o hash.
 // Horário ocupado, na corrida ou fora das regras: 409 slot_unavailable.

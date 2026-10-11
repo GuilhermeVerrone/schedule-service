@@ -54,7 +54,7 @@ export interface PublicBookingInput {
   // Ausente ou null: "qualquer profissional disponível".
   professionalId?: string | null;
   startsAt: Date;
-  customer: { name: string; phone: string; email?: string | null };
+  contact: { name: string; phone: string; email?: string | null };
 }
 
 export interface PublicBookingResult {
@@ -104,7 +104,7 @@ export async function createPublicAppointment(
   const candidates = await candidatesFor(repo, settings, input, durationMinutes, now);
   if (!candidates) return null;
 
-  const customer = await repo.customers.findOrCreateByPhone(input.customer, { source: PUBLIC_CONSENT_SOURCE, at: now });
+  const contact = await repo.contacts.findOrCreateByPhone(input.contact, { source: PUBLIC_CONSENT_SOURCE, at: now });
   const { token, tokenHash } = issueManageToken();
   const endsAt = new Date(input.startsAt.getTime() + durationMinutes * MINUTE_MS);
   let conflict: AppointmentConflictError | null = null;
@@ -113,7 +113,7 @@ export async function createPublicAppointment(
       const appointment = await repo.appointments.create({
         professionalId,
         serviceId: input.serviceId,
-        customerId: customer.id,
+        contactId: contact.id,
         startsAt: input.startsAt,
         endsAt,
         manageTokenHash: tokenHash,

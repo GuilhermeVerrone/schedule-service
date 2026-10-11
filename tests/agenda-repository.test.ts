@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ZodError } from "zod";
-import type { Customer, Professional, Service, Tenant, TimeBlock } from "@/generated/prisma/client";
+import type { Contact, Professional, Service, Tenant, TimeBlock } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import {
   AppointmentConflictError,
@@ -12,7 +12,7 @@ import {
 } from "@/server/repositories/tenant-repository";
 import { createTestTenant, deleteTestTenants } from "./helpers/tenants";
 
-// Fase 2: Customer, Appointment, TimeBlock e configurações da agenda pelo repositório (guia 5, 6;
+// Fase 2: Contact, Appointment, TimeBlock e configurações da agenda pelo repositório (guia 5, 6;
 // D5, D8). Isolamento por tenant inclusive por ID, e a EXCLUDE gist virando erro tipado.
 
 let tenantA: Tenant;
@@ -23,12 +23,12 @@ let repoB: TenantRepository;
 let profA: Professional;
 let profA2: Professional;
 let serviceA: Service;
-let customerA: Customer;
+let contactA: Contact;
 
 // Dados do tenant B que o tenant A tenta alcançar.
 let profB: Professional;
 let serviceB: Service;
-let customerB: Customer;
+let contactB: Contact;
 let appointmentB: AppointmentDetails;
 let blockB: TimeBlock;
 const tokenB = randomBytes(32).toString("base64url");
@@ -48,20 +48,20 @@ beforeAll(async () => {
     repoA.professionals.create({ name: "Bruno (A)" }),
     repoA.services.create({ name: "Corte (A)", durationMinutes: 60, priceCents: 5000 }),
   ]);
-  customerA = await repoA.customers.findOrCreateByPhone({ name: "Carla (A)", phone: "5511911110000" });
+  contactA = await repoA.contacts.findOrCreateByPhone({ name: "Carla (A)", phone: "+5511911110000" });
 
   [profB, serviceB] = await Promise.all([
     repoB.professionals.create({ name: "Bia (B)" }),
     repoB.services.create({ name: "Barba (B)", durationMinutes: 30, priceCents: 3000 }),
   ]);
-  customerB = await repoB.customers.findOrCreateByPhone(
-    { name: "Davi (B)", phone: "5511922220000", email: "davi@example.com" },
+  contactB = await repoB.contacts.findOrCreateByPhone(
+    { name: "Davi (B)", phone: "+5511922220000", email: "davi@example.com" },
     { source: "public_booking" },
   );
   appointmentB = (await repoB.appointments.create({
     professionalId: profB.id,
     serviceId: serviceB.id,
-    customerId: customerB.id,
+    contactId: contactB.id,
     startsAt: at("2031-03-10T13:00:00"),
     endsAt: at("2031-03-10T13:30:00"),
     manageTokenHash: hashOf(tokenB),
@@ -79,9 +79,9 @@ afterAll(async () => {
 });
 
 async function expectTenantBUntouched(): Promise<void> {
-  const [tenant, customers, appointments, blocks] = await Promise.all([
+  const [tenant, contacts, appointments, blocks] = await Promise.all([
     prisma.tenant.findUniqueOrThrow({ where: { id: tenantB.id } }),
-    prisma.customer.findMany({ where: { tenantId: tenantB.id } }),
+    prisma.contact.findMany({ where: { tenantId: tenantB.id } }),
     prisma.appointment.findMany({ where: { tenantId: tenantB.id } }),
     prisma.timeBlock.findMany({ where: { tenantId: tenantB.id } }),
   ]);
@@ -95,8 +95,8 @@ async function expectTenantBUntouched(): Promise<void> {
     maxWindowDays: 60,
     cancelDeadlineMinutes: 120,
   });
-  expect(customers).toHaveLength(1);
-  expect(customers[0]).toMatchObject({ id: customerB.id, name: "Davi (B)", email: "davi@example.com" });
+  expect(contacts).toHaveLength(1);
+  expect(contacts[0]).toMatchObject({ id: contactB.id, name: "Davi (B)", email: "davi@example.com" });
   expect(appointments).toHaveLength(1);
   expect(appointments[0]).toMatchObject({
     id: appointmentB.id,
@@ -113,7 +113,7 @@ function newAppointment(startIso: string, endIso: string, professionalId = profA
   return {
     professionalId,
     serviceId: serviceA.id,
-    customerId: customerA.id,
+    contactId: contactA.id,
     startsAt: at(startIso),
     endsAt: at(endIso),
   };
@@ -179,58 +179,58 @@ describe("configurações da agenda (D3)", () => {
   });
 });
 
-describe("clientes (D5)", () => {
+describe("contatos (D5; D1 da Fatia 3)", () => {
   it("reencontra pelo telefone sem sobrescrever nome e e-mail", async () => {
-    const again = await repoA.customers.findOrCreateByPhone({ name: "Outro Nome", phone: "5511911110000", email: "x@y.com" });
-    expect(again).toMatchObject({ id: customerA.id, name: "Carla (A)", email: null });
-    expect((await repoA.customers.findByPhone("5511911110000"))?.id).toBe(customerA.id);
+    const again = await repoA.contacts.findOrCreateByPhone({ name: "Outro Nome", phone: "+5511911110000", email: "x@y.com" });
+    expect(again).toMatchObject({ id: contactA.id, name: "Carla (A)", email: null });
+    expect((await repoA.contacts.findByPhone("+5511911110000"))?.id).toBe(contactA.id);
   });
 
   it("registra o consentimento uma vez, com origem e data", async () => {
-    const created = await repoA.customers.findOrCreateByPhone({ name: "Eli (A)", phone: "551133334444" });
+    const created = await repoA.contacts.findOrCreateByPhone({ name: "Eli (A)", phone: "+551133334444" });
     expect(created.consentAt).toBeNull();
     const first = new Date("2031-01-01T10:00:00Z");
-    const consented = await repoA.customers.findOrCreateByPhone(
-      { name: "Eli (A)", phone: "551133334444" },
+    const consented = await repoA.contacts.findOrCreateByPhone(
+      { name: "Eli (A)", phone: "+551133334444" },
       { source: "public_booking", at: first },
     );
     expect(consented).toMatchObject({ id: created.id, consentAt: first, consentSource: "public_booking" });
-    const later = await repoA.customers.findOrCreateByPhone(
-      { name: "Eli (A)", phone: "551133334444" },
+    const later = await repoA.contacts.findOrCreateByPhone(
+      { name: "Eli (A)", phone: "+551133334444" },
       { source: "manual", at: new Date("2031-02-01T10:00:00Z") },
     );
     expect(later).toMatchObject({ consentAt: first, consentSource: "public_booking" });
   });
 
   it("dois cadastros simultâneos do mesmo telefone viram um cliente só", async () => {
-    const input = { name: "Fê (A)", phone: "5521955556666" };
+    const input = { name: "Fê (A)", phone: "+5521955556666" };
     const [x, y] = await Promise.all([
-      repoA.customers.findOrCreateByPhone(input),
-      repoA.customers.findOrCreateByPhone(input),
+      repoA.contacts.findOrCreateByPhone(input),
+      repoA.contacts.findOrCreateByPhone(input),
     ]);
     expect(x.id).toBe(y.id);
   });
 
   it("recusa telefone não normalizado antes do banco", async () => {
-    for (const phone of ["11987654321", "+5511987654321", "(11) 98765-4321", "55119876543210"]) {
-      await expect(repoA.customers.findOrCreateByPhone({ name: "Gui", phone })).rejects.toThrow(ZodError);
-      expect(await repoA.customers.findByPhone(phone)).toBeNull();
+    for (const phone of ["11987654321", "5511987654321", "(11) 98765-4321", "+55119876543210", "+5511187654321"]) {
+      await expect(repoA.contacts.findOrCreateByPhone({ name: "Gui", phone })).rejects.toThrow(ZodError);
+      expect(await repoA.contacts.findByPhone(phone)).toBeNull();
     }
   });
 
   it("o mesmo telefone em outro tenant é outro cliente", async () => {
-    const inA = await repoA.customers.findOrCreateByPhone({ name: "Davi (A)", phone: customerB.phone });
-    expect(inA.id).not.toBe(customerB.id);
+    const inA = await repoA.contacts.findOrCreateByPhone({ name: "Davi (A)", phone: contactB.phone });
+    expect(inA.id).not.toBe(contactB.id);
     expect(inA.tenantId).toBe(tenantA.id);
-    await prisma.customer.delete({ where: { id: inA.id } });
+    await prisma.contact.delete({ where: { id: inA.id } });
   });
 
   it("tenant A não lê nem altera cliente do B, por ID ou telefone", async () => {
-    expect(await repoA.customers.findById(customerB.id)).toBeNull();
-    expect(await repoA.customers.findByPhone(customerB.phone)).toBeNull();
-    expect(await repoA.customers.update(customerB.id, { name: "Invadido" })).toBeNull();
-    expect((await repoA.customers.list()).some((c) => c.tenantId !== tenantA.id)).toBe(false);
-    expect(await repoA.customers.findById("nao-e-uuid")).toBeNull();
+    expect(await repoA.contacts.findById(contactB.id)).toBeNull();
+    expect(await repoA.contacts.findByPhone(contactB.phone)).toBeNull();
+    expect(await repoA.contacts.update(contactB.id, { name: "Invadido" })).toBeNull();
+    expect((await repoA.contacts.list()).some((c) => c.tenantId !== tenantA.id)).toBe(false);
+    expect(await repoA.contacts.findById("nao-e-uuid")).toBeNull();
     await expectTenantBUntouched();
   });
 });
@@ -240,7 +240,7 @@ describe("agendamentos: isolamento (guia 6)", () => {
     const base = newAppointment("2031-03-10T08:00:00", "2031-03-10T09:00:00");
     expect(await repoA.appointments.create({ ...base, professionalId: profB.id })).toBeNull();
     expect(await repoA.appointments.create({ ...base, serviceId: serviceB.id })).toBeNull();
-    expect(await repoA.appointments.create({ ...base, customerId: customerB.id })).toBeNull();
+    expect(await repoA.appointments.create({ ...base, contactId: contactB.id })).toBeNull();
     expect(await repoA.appointments.listRange(DAY)).toEqual([]);
   });
 
@@ -275,7 +275,7 @@ describe("agendamentos: isolamento (guia 6)", () => {
     expect(list[0]).toMatchObject({
       professional: { id: profB.id, name: "Bia (B)" },
       service: { id: serviceB.id, name: "Barba (B)", durationMinutes: 30 },
-      customer: { id: customerB.id, name: "Davi (B)", phone: customerB.phone },
+      contact: { id: contactB.id, name: "Davi (B)", phone: contactB.phone },
     });
     const fromA = await repoA.appointments.listRange({ ...DAY, professionalId: profB.id });
     expect(fromA).toEqual([]);

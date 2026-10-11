@@ -84,7 +84,7 @@ async function pickDay(page: Page, date: string): Promise<void> {
   await expect(page.getByText("Carregando horários livres…")).toHaveCount(0);
 }
 
-async function fillCustomer(page: Page, name: string, phone: string): Promise<void> {
+async function fillContact(page: Page, name: string, phone: string): Promise<void> {
   await page.getByLabel("Nome", { exact: true }).fill(name);
   await page.getByLabel("Telefone com DDD").fill(phone);
   await page.getByRole("checkbox").check();
@@ -133,7 +133,7 @@ test("site público: agendar, ver, remarcar e cancelar pelo link, e disputa pelo
       status: string;
       startsAt: string;
       professional: { name: string };
-      customer: { name: string; phone: string };
+      contact: { name: string; phone: string };
     }[];
   };
 
@@ -190,7 +190,7 @@ test("site público: agendar, ver, remarcar e cancelar pelo link, e disputa pelo
     await expectNoHorizontalScroll(page);
     await shot(page, "04-dados-erros");
 
-    await fillCustomer(page, "Marina Souza", "(13) 98888-1234");
+    await fillContact(page, "Marina Souza", "(13) 98888-1234");
     await page.getByLabel("E-mail (opcional)").fill("marina@exemplo.com");
     await page.getByRole("button", { name: "Confirmar agendamento" }).click();
     await expect(heading(page, "Agendamento confirmado")).toBeFocused();
@@ -209,7 +209,7 @@ test("site público: agendar, ver, remarcar e cancelar pelo link, e disputa pelo
 
     const [created] = await ownerAppointments();
     expect(created).toMatchObject({ status: "confirmed", startsAt: at(day, "10:00"), professional: { name: "Ana Lima" } });
-    expect(created.customer).toMatchObject({ name: "Marina Souza", phone: "5513988881234" });
+    expect(created.contact).toMatchObject({ name: "Marina Souza", phone: "+5513988881234" });
   });
 
   await test.step("ver pelo link: dados, prazo e cabeçalhos sem vazamento do token", async () => {
@@ -299,7 +299,7 @@ test("site público: agendar, ver, remarcar e cancelar pelo link, e disputa pelo
         serviceId: barba,
         professionalId: professionals["Bruno Reis"],
         startsAt: at(day, "09:00"),
-        customer: { name: "Paulo Prazo", phone: "13977776666" },
+        contact: { name: "Paulo Prazo", phone: "13977776666" },
         consent: true,
       },
     });
@@ -328,7 +328,7 @@ test("site público: agendar, ver, remarcar e cancelar pelo link, e disputa pelo
       await pickDay(contender.page, day);
       await timeButton(contender.page, "11:00").click();
       await expect(heading(contender.page, "Seus dados")).toBeVisible();
-      await fillCustomer(contender.page, contender.name, contender.phone);
+      await fillContact(contender.page, contender.name, contender.phone);
     }
 
     // Os dois confirmam ao mesmo tempo.
@@ -356,7 +356,7 @@ test("site público: agendar, ver, remarcar e cancelar pelo link, e disputa pelo
 
     const atEleven = (await ownerAppointments()).filter((item) => item.startsAt === at(day, "11:00") && item.status === "confirmed");
     expect(atEleven).toHaveLength(1);
-    expect(atEleven[0].customer.name).toBe(winner.name);
+    expect(atEleven[0].contact.name).toBe(winner.name);
 
     // Quem perdeu escolhe outro horário e confirma sem redigitar os dados.
     await timeButton(loser.page, "14:00").click();

@@ -20,7 +20,6 @@ import * as timeBlocksRoute from "@/app/api/time-blocks/route";
 import * as timeBlockRoute from "@/app/api/time-blocks/[id]/route";
 import * as availabilityRoute from "@/app/api/availability/route";
 import { TENANT_ID_HEADER, USER_ID_HEADER } from "@/server/auth/context";
-import { normalizePhone } from "@/server/validation/agenda-api";
 import { apiRequest, cleanupAuthData, sessionCookieOf, uniqueEmail } from "./helpers/auth";
 import { createRouteCaller, HTTP_METHODS, type CallOptions, type Method, type RouteModule } from "./helpers/api-routes";
 
@@ -118,7 +117,7 @@ function book(account: Account, startsAt: string, extra: Record<string, unknown>
       professionalId: account.professionalId,
       serviceId: account.serviceId,
       startsAt,
-      customer: { name: "Cliente Teste", phone: nextPhone() },
+      contact: { name: "Cliente Teste", phone: nextPhone() },
       ...extra,
     },
   });
@@ -154,19 +153,14 @@ describe("cobertura", () => {
       .filter((route) => !route.startsWith("/api/auth") && !catalog.some((prefix) => route.startsWith(prefix)))
       // A API pública (Fase 5) tem a própria tabela em tests/public-api.test.ts.
       .filter((route) => !route.startsWith("/api/public/"))
+      // A API do WhatsApp (whatsapp-conexao-mensagens) tem a própria tabela em tests/whatsapp-api.test.ts.
+      .filter((route) => !["/api/whatsapp", "/api/conversations", "/api/webhooks"].some((p) => route.startsWith(p)))
       .sort();
     expect(routes).toEqual(Object.keys(AGENDA_ROUTES).sort());
   });
 });
 
-describe("normalização do telefone digitado", () => {
-  it("tira máscara e acrescenta o DDI 55 quando falta", () => {
-    expect(normalizePhone("(11) 98765-4321")).toBe("5511987654321");
-    expect(normalizePhone("+55 11 98765-4321")).toBe("5511987654321");
-    expect(normalizePhone("11 3456-7890")).toBe("551134567890");
-    expect(normalizePhone("123")).toBe("123");
-  });
-});
+// A normalização do telefone tem testes próprios em tests/phone.test.ts.
 
 describe("configurações (guia 7e; D2, D3)", () => {
   it("GET devolve dados do negócio e os padrões da agenda", async () => {
@@ -289,7 +283,7 @@ describe("configurações (guia 7e; D2, D3)", () => {
 describe("agendamento manual e agenda (guia 7d; D4, D9)", () => {
   it("cria com fim pela duração do serviço, telefone normalizado e sem token de gestão", async () => {
     const created = await book(a, at(DAY, "09:00"), {
-      customer: { name: "  Maria Silva ", phone: "(11) 98765-0001", email: "maria@exemplo.com" },
+      contact: { name: "  Maria Silva ", phone: "(11) 98765-0001", email: "maria@exemplo.com" },
     });
     expect(created.status).toBe(201);
     const appointment = created.body.appointment;
@@ -300,13 +294,13 @@ describe("agendamento manual e agenda (guia 7d; D4, D9)", () => {
       canceledAt: null,
       professional: { id: a.professionalId },
       service: { id: a.serviceId, durationMinutes: 60 },
-      customer: { name: "Maria Silva", phone: "5511987650001" },
+      contact: { name: "Maria Silva", phone: "+5511987650001" },
     });
     expect(JSON.stringify(created.body)).not.toMatch(/manageTokenHash|tenantId/);
     const row = await prisma.appointment.findUnique({ where: { id: appointment.id } });
     expect(row).toMatchObject({ tenantId: a.tenantId, manageTokenHash: null });
-    const customer = await prisma.customer.findUnique({ where: { id: appointment.customer.id } });
-    expect(customer).toMatchObject({ email: "maria@exemplo.com", consentAt: null });
+    const contact = await prisma.contact.findUnique({ where: { id: appointment.contact.id } });
+    expect(contact).toMatchObject({ email: "maria@exemplo.com", consentAt: null });
 
     const read = await call("GET", `/api/appointments/${appointment.id}`, { token: a.token });
     expect(read.status).toBe(200);
@@ -315,10 +309,10 @@ describe("agendamento manual e agenda (guia 7d; D4, D9)", () => {
     // O mesmo telefone, com outra máscara, reencontra o cliente.
     const again = await book(a, at(DAY, "09:00"), {
       professionalId: a.otherProfessionalId,
-      customer: { name: "Outro Nome", phone: "+55 11 98765-0001" },
+      contact: { name: "Outro Nome", phone: "+55 11 98765-0001" },
     });
     expect(again.status).toBe(201);
-    expect(again.body.appointment.customer).toEqual(appointment.customer);
+    expect(again.body.appointment.contact).toEqual(appointment.contact);
   });
 
   it("lista a agenda por intervalo, por início, com filtros de profissional e status", async () => {
@@ -377,7 +371,7 @@ describe("agendamento manual e agenda (guia 7d; D4, D9)", () => {
       body: { professionalId: a.professionalId, startsAt: at(day, "14:00"), endsAt: at(day, "15:00") },
     });
     const before = await prisma.appointment.count({ where: { tenantId: a.tenantId } });
-    const customersBefore = await prisma.customer.count({ where: { tenantId: a.tenantId } });
+    const contactsBefore = await prisma.contact.count({ where: { tenantId: a.tenantId } });
 
     for (const time of ["10:00", "10:30", "09:15"]) {
       await expectError(book(a, at(day, time)), 409, "slot_unavailable");
@@ -389,7 +383,7 @@ describe("agendamento manual e agenda (guia 7d; D4, D9)", () => {
     await expectError(book(a, at(dayPlus(-1), "10:00")), 409, "slot_unavailable"); // passado
 
     expect(await prisma.appointment.count({ where: { tenantId: a.tenantId } })).toBe(before);
-    expect(await prisma.customer.count({ where: { tenantId: a.tenantId } })).toBe(customersBefore);
+    expect(await prisma.contact.count({ where: { tenantId: a.tenantId } })).toBe(contactsBefore);
     // Outro profissional no mesmo horário pode.
     expect((await book(a, at(day, "10:00"), { professionalId: a.otherProfessionalId })).status).toBe(201);
   });
@@ -421,15 +415,15 @@ describe("agendamento manual e agenda (guia 7d; D4, D9)", () => {
       professionalId: a.professionalId,
       serviceId: a.serviceId,
       startsAt: at(DAY, "16:00"),
-      customer: { name: "Cliente", phone: "11987650002" },
+      contact: { name: "Cliente", phone: "11987650002" },
     };
     const invalid: unknown[] = [
       {},
-      { ...valid, customer: undefined },
-      { ...valid, customer: { name: "C", phone: "11987650002" } },
-      { ...valid, customer: { name: "Cliente" } },
-      { ...valid, customer: { name: "Cliente", phone: "123" } },
-      { ...valid, customer: { name: "Cliente", phone: "11987650002", email: "nao-e-email" } },
+      { ...valid, contact: undefined },
+      { ...valid, contact: { name: "C", phone: "11987650002" } },
+      { ...valid, contact: { name: "Cliente" } },
+      { ...valid, contact: { name: "Cliente", phone: "123" } },
+      { ...valid, contact: { name: "Cliente", phone: "11987650002", email: "nao-e-email" } },
       { ...valid, startsAt: "2026-10-20T10:00" },
       { ...valid, startsAt: "amanhã" },
       { ...valid, professionalId: undefined },
@@ -505,7 +499,7 @@ describe("cancelar, concluir e remarcar (D4)", () => {
       status: "confirmed",
       startsAt: at(day, "14:00"),
       endsAt: at(day, "15:00"),
-      customer: created.customer,
+      contact: created.contact,
     });
     const slots = await slotTimes(a, day);
     expect(slots).toContain("10:00");
@@ -739,13 +733,13 @@ describe("isolamento por tenant (guia 6, 9)", () => {
   const snapshotOfB = async () => ({
     tenant: await prisma.tenant.findUnique({ where: { id: b.tenantId } }),
     appointments: await prisma.appointment.findMany({ where: { tenantId: b.tenantId }, orderBy: { id: "asc" } }),
-    customers: await prisma.customer.findMany({ where: { tenantId: b.tenantId }, orderBy: { id: "asc" } }),
+    contacts: await prisma.contact.findMany({ where: { tenantId: b.tenantId }, orderBy: { id: "asc" } }),
     timeBlocks: await prisma.timeBlock.findMany({ where: { tenantId: b.tenantId }, orderBy: { id: "asc" } }),
   });
 
   beforeAll(async () => {
     const day = dayPlus(40);
-    const appointment = await book(b, at(day, "10:00"), { customer: { name: "Cliente do B", phone: "(21) 99999-0001" } });
+    const appointment = await book(b, at(day, "10:00"), { contact: { name: "Cliente do B", phone: "(21) 99999-0001" } });
     const canceled = await book(b, at(day, "14:00"));
     await call("POST", `/api/appointments/${canceled.body.appointment.id}/cancel`, { token: b.token });
     const block = await call("POST", "/api/time-blocks", {
@@ -766,7 +760,7 @@ describe("isolamento por tenant (guia 6, 9)", () => {
       professionalId,
       serviceId,
       startsAt: at(day, "10:00"),
-      customer: { name: "Invasor", phone: "(11) 90000-0001" },
+      contact: { name: "Invasor", phone: "(11) 90000-0001" },
     });
     return [
       ["GET", `/api/appointments/${bData.appointmentId}`],
@@ -859,7 +853,7 @@ describe("isolamento por tenant (guia 6, 9)", () => {
   it("o tenant B segue com acesso normal aos próprios dados", async () => {
     const read = await call("GET", `/api/appointments/${bData.appointmentId}`, { token: b.token });
     expect(read.status).toBe(200);
-    expect(read.body.appointment.customer.name).toBe("Cliente do B");
+    expect(read.body.appointment.contact.name).toBe("Cliente do B");
     expect((await call("GET", `/api/time-blocks/${bData.timeBlockId}`, { token: b.token })).status).toBe(200);
   });
 

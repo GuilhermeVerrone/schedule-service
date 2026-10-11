@@ -9,7 +9,9 @@ import { createPublicRepository } from "@/server/repositories/public-repository"
 // requisição (guia 6). Os cabeçalhos vindos do cliente são sempre apagados antes, então só o
 // proxy consegue preenchê-los. Toda rota /api exige sessão, salvo as públicas abaixo e o prefixo
 // /api/public/ do site do negócio (D1), que resolve o tenant pelo slug e nunca pela sessão: lá o
-// proxy só apaga os cabeçalhos, sem ler o cookie. Nas telas, /painel sem sessão vai para o login
+// proxy só apaga os cabeçalhos, sem ler o cookie. O webhook do WhatsApp (D8) segue a mesma regra:
+// sem sessão e sem tenantId injetado; a rota confere o segredo e resolve o tenant pela sessão do
+// provedor. Nas telas, /painel sem sessão vai para o login
 // e /login ou /cadastro com sessão vão para o painel.
 // Site do negócio em /{slug}/... (D1, guia 7f): o proxy confere só se o slug existe e, se não,
 // responde 404 já aqui. A página é servida em streaming (cacheComponents) e, dentro dela, o
@@ -22,6 +24,13 @@ const trimSlash = (pathname: string): string => (pathname.length > 1 ? pathname.
 
 export function isPublicSiteApi(pathname: string): boolean {
   return trimSlash(pathname).startsWith(PUBLIC_API_PREFIX);
+}
+
+// Webhooks de provedores: rota fixa, autenticada pelo segredo do provedor, nunca pela sessão.
+export const WEBHOOK_ROUTES = new Set(["/api/webhooks/whatsapp"]);
+
+export function isWebhookApi(pathname: string): boolean {
+  return WEBHOOK_ROUTES.has(trimSlash(pathname));
 }
 
 // Primeiros segmentos que são do próprio Slotz e nunca de um site de negócio.
@@ -39,7 +48,12 @@ const NOT_FOUND_PATH = "/_slotz/nao-encontrado";
 
 function isProtectedApi(pathname: string): boolean {
   const path = trimSlash(pathname);
-  return (path === "/api" || path.startsWith("/api/")) && !PUBLIC_API_ROUTES.has(path) && !isPublicSiteApi(path);
+  return (
+    (path === "/api" || path.startsWith("/api/")) &&
+    !PUBLIC_API_ROUTES.has(path) &&
+    !isPublicSiteApi(path) &&
+    !isWebhookApi(path)
+  );
 }
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
@@ -47,8 +61,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   headers.delete(TENANT_ID_HEADER);
   headers.delete(USER_ID_HEADER);
 
-  // Site público: nem sessão, nem tenantId injetado (mesmo com o dono logado no navegador).
-  if (isPublicSiteApi(request.nextUrl.pathname)) return NextResponse.next({ request: { headers } });
+  // Site público e webhooks: nem sessão, nem tenantId injetado (mesmo com o dono logado no navegador).
+  if (isPublicSiteApi(request.nextUrl.pathname) || isWebhookApi(request.nextUrl.pathname)) {
+    return NextResponse.next({ request: { headers } });
+  }
 
   const siteSlug = publicSiteSlug(request.nextUrl.pathname);
   if (siteSlug !== null) {

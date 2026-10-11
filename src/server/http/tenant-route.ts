@@ -5,6 +5,8 @@ import { getAuthContext } from "@/server/auth/context";
 import { unauthorizedResponse } from "@/server/auth/responses";
 import { errorResponse, readJson, validationErrorResponse } from "@/server/http/errors";
 import { NotBookableError, SlotUnavailableError } from "@/server/agenda/booking";
+import { AlreadyConnectedError, NoConnectionError } from "@/server/messaging/connection";
+import { WhatsAppProviderError } from "@/server/whatsapp";
 import {
   AppointmentConflictError,
   AppointmentStatusError,
@@ -31,6 +33,8 @@ export const NOT_FOUND = {
   link: "Profissional ou serviço não encontrado.",
   appointment: "Agendamento não encontrado.",
   timeBlock: "Bloqueio não encontrado.",
+  conversation: "Conversa não encontrada.",
+  whatsappConnection: "Nenhuma conexão do WhatsApp. Conecte pelo QR code.",
 } as const;
 
 const STATUS_LABEL = { confirmed: "confirmado", canceled: "cancelado", completed: "concluído" } as const;
@@ -80,6 +84,14 @@ export function tenantRoute<P = Record<string, never>>(handler: Handler<P>) {
         return errorResponse(409, "invalid_status", `Esse agendamento já está ${STATUS_LABEL[error.status]}.`);
       }
       if (error instanceof NotBookableError) return errorResponse(422, "not_bookable", error.message);
+      if (error instanceof NoConnectionError) return errorResponse(404, "not_found", NOT_FOUND.whatsappConnection);
+      if (error instanceof AlreadyConnectedError) {
+        return errorResponse(409, "already_connected", "O WhatsApp já está conectado.");
+      }
+      // Erro do provedor do WhatsApp: mensagem genérica, sem detalhe do provedor (D8).
+      if (error instanceof WhatsAppProviderError) {
+        return errorResponse(503, "whatsapp_unavailable", "O serviço do WhatsApp não respondeu. Tente de novo em instantes.");
+      }
       throw error;
     }
   };

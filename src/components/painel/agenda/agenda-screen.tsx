@@ -12,9 +12,9 @@ import { ListSkeleton, LoadError } from "@/components/painel/catalog/states";
 import { useResource } from "@/components/painel/catalog/use-resource";
 import { CONTROL } from "@/components/painel/settings/fields";
 import { Button } from "@/components/ui/button";
+import { formatPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import {
-  formatPhone,
   loadCatalog,
   loadRange,
   STATUS_LABEL,
@@ -198,7 +198,7 @@ function Agenda({ catalog }: { catalog: AgendaCatalog }) {
                   setPanel(null);
                   if (view === "week" && !wide) setView("day");
                   showOn(appointment.startsAt, appointment.id);
-                  toast.success(`Agendamento criado: ${appointment.customer.name}, ${whenLabel(appointment.startsAt, timezone)}.`);
+                  toast.success(`Agendamento criado: ${appointment.contact.name}, ${whenLabel(appointment.startsAt, timezone)}.`);
                 }}
               />
             ) : (
@@ -283,7 +283,7 @@ function Agenda({ catalog }: { catalog: AgendaCatalog }) {
                 onAppointment={replaceAppointment}
                 onRescheduled={(appointment) => {
                   showOn(appointment.startsAt, appointment.id);
-                  toast.success(`Remarcado: ${appointment.customer.name}, ${whenLabel(appointment.startsAt, timezone)}.`);
+                  toast.success(`Remarcado: ${appointment.contact.name}, ${whenLabel(appointment.startsAt, timezone)}.`);
                 }}
                 onBlockRemoved={refresh}
                 empty="Nenhum agendamento neste dia."
@@ -312,7 +312,7 @@ function Agenda({ catalog }: { catalog: AgendaCatalog }) {
                 onRescheduled={(appointment) => {
                   setView("day");
                   showOn(appointment.startsAt, appointment.id);
-                  toast.success(`Remarcado: ${appointment.customer.name}, ${whenLabel(appointment.startsAt, timezone)}.`);
+                  toast.success(`Remarcado: ${appointment.contact.name}, ${whenLabel(appointment.startsAt, timezone)}.`);
                 }}
                 onBlockRemoved={refresh}
               />
@@ -401,7 +401,7 @@ function EntryRow({ entry, catalog, open, setOpen, onAppointment, onRescheduled,
   const isOpen = open?.id === item.id;
   const panelId = `detalhes-${item.id}`;
   const canceled = entry.kind === "appointment" && entry.item.status === "canceled";
-  const name = entry.kind === "appointment" ? entry.item.customer.name : "Horário bloqueado";
+  const name = entry.kind === "appointment" ? entry.item.contact.name : "Horário bloqueado";
   const detail =
     entry.kind === "appointment"
       ? `${entry.item.service.name} · ${entry.item.professional.name}`
@@ -496,7 +496,7 @@ function AppointmentDetails({
 }) {
   const { timezone } = catalog;
   const [busy, setBusy] = useState<"complete" | "cancel" | null>(null);
-  const { customer, service } = appointment;
+  const { contact, service } = appointment;
   const start = localTime(appointment.startsAt, timezone);
   const minutes = Math.round((Date.parse(appointment.endsAt) - Date.parse(appointment.startsAt)) / 60_000);
 
@@ -512,8 +512,8 @@ function AppointmentDetails({
     setMode("details");
     toast.success(
       action === "complete"
-        ? `Atendimento de ${customer.name} marcado como concluído.`
-        : `Agendamento de ${customer.name} cancelado. O horário das ${start} ficou livre.`,
+        ? `Atendimento de ${contact.name} marcado como concluído.`
+        : `Agendamento de ${contact.name} cancelado. O horário das ${start} ficou livre.`,
     );
   }
 
@@ -532,8 +532,8 @@ function AppointmentDetails({
     <div className="flex flex-col gap-6">
       <DetailList
         items={[
-          ["Cliente", customer.name],
-          ["Telefone", <a key="tel" href={`tel:+${customer.phone}`}>{formatPhone(customer.phone)}</a>],
+          ["Cliente", contact.name],
+          ["Telefone", <a key="tel" href={`tel:${contact.phone}`}>{formatPhone(contact.phone)}</a>],
           ["Serviço", `${service.name}, ${formatDuration(minutes)}, ${formatCents(service.priceCents)}`],
           ["Profissional", appointment.professional.name],
           ["Horário", `${dayParts(localDate(appointment.startsAt, timezone)).long}, ${start} às ${localTime(appointment.endsAt, timezone)}`],
@@ -544,7 +544,7 @@ function AppointmentDetails({
         (mode === "cancel" ? (
           <div role="group" aria-label="Confirmar cancelamento" className="flex flex-col gap-4 rounded-control bg-danger/8 p-4">
             <p className="text-small text-ink">
-              Cancelar o agendamento de {customer.name} às {start}? O horário volta a ficar livre para outro cliente.
+              Cancelar o agendamento de {contact.name} às {start}? O horário volta a ficar livre para outro cliente.
             </p>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setMode("details")} disabled={busy !== null} className="w-full sm:w-auto">
@@ -691,7 +691,7 @@ function WeekColumns({
             <ul className="flex flex-col gap-1.5">
               {items.map((entry) => {
                 const canceled = entry.kind === "appointment" && entry.item.status === "canceled";
-                const label = entry.kind === "appointment" ? entry.item.customer.name : "Bloqueado";
+                const label = entry.kind === "appointment" ? entry.item.contact.name : "Bloqueado";
                 const sub =
                   entry.kind === "appointment"
                     ? `${entry.item.service.name} · ${entry.item.professional.name}`

@@ -17,7 +17,7 @@ export const GET = tenantRoute(async ({ request, repo }) => {
   return NextResponse.json({ appointments: appointments.map(appointmentDto) });
 });
 
-// POST /api/appointments { professionalId, serviceId, startsAt, customer: { name, phone, email? } }:
+// POST /api/appointments { professionalId, serviceId, startsAt, contact: { name, phone, email? } }:
 // agendamento manual do dono. Horário ocupado ou fora da agenda: 409.
 export const POST = tenantRoute(async ({ request, repo }) => {
   const input = await parseBody(request, appointmentCreateSchema);

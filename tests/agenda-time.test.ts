@@ -11,7 +11,8 @@ import {
   todayIn,
   weekStart,
 } from "@/components/painel/agenda/agenda-time";
-import { conflictMessage, formatPhone } from "@/components/painel/agenda/agenda-data";
+import { conflictMessage } from "@/components/painel/agenda/agenda-data";
+import { formatPhone } from "@/lib/phone";
 
 // Datas da tela /painel/agenda (Fase 7; D9, D11): dia e semana no fuso do negócio, intervalos em
 // UTC para a API e conversão de dia + hora digitados, inclusive no horário de verão.
@@ -76,8 +77,8 @@ describe("datas da agenda do painel", () => {
   });
 
   it("telefone e conflito em linguagem do dono", () => {
-    expect(formatPhone("5511987654321")).toBe("(11) 98765-4321");
-    expect(formatPhone("551132654321")).toBe("(11) 3265-4321");
+    expect(formatPhone("+5511987654321")).toBe("(11) 98765-4321");
+    expect(formatPhone("+551132654321")).toBe("(11) 3265-4321");
     expect(conflictMessage("appointment_conflict", "x", "Ana")).toMatch(/^Conflito de horário: Ana já tem um agendamento/);
     expect(conflictMessage("slot_unavailable", "x", "Ana")).toMatch(/não está livre para Ana/);
     expect(conflictMessage("not_bookable", "Esse serviço está arquivado.")).toBe("Esse serviço está arquivado.");

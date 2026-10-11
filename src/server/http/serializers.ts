@@ -1,7 +1,14 @@
 import type { Professional, Service, TimeBlock, WorkingHours } from "@/generated/prisma/client";
 import type { ManageState } from "@/server/agenda/public-booking";
+import type { ConnectionView } from "@/server/messaging/connection";
 import type { PublicSite } from "@/server/repositories/public-repository";
-import type { AppointmentDetails } from "@/server/repositories/tenant-repository";
+import type {
+  AppointmentDetails,
+  ConversationDetails,
+  ConversationSummary,
+  MessageView,
+  Page,
+} from "@/server/repositories/tenant-repository";
 
 // Corpo das respostas da API: sem tenant_id (vem sempre da sessão) e horários no mesmo
 // formato "HH:MM" da entrada.
@@ -53,7 +60,7 @@ export function appointmentDto(appointment: AppointmentDetails) {
     canceledAt: appointment.canceledAt,
     professional: appointment.professional,
     service: appointment.service,
-    customer: appointment.customer,
+    contact: appointment.contact,
     createdAt: appointment.createdAt,
     updatedAt: appointment.updatedAt,
   };
@@ -93,7 +100,7 @@ export function publicSiteDto(site: PublicSite) {
   };
 }
 
-// Agendamento visto pelo link de gestão (D6): sem id, sem hash e, do cliente, só o nome.
+// Agendamento visto pelo link de gestão (D6): sem id, sem hash e, do contato, só o nome.
 export function publicAppointmentDto(appointment: AppointmentDetails, state: ManageState) {
   return {
     status: appointment.status,
@@ -102,8 +109,64 @@ export function publicAppointmentDto(appointment: AppointmentDetails, state: Man
     canceledAt: appointment.canceledAt,
     service: appointment.service,
     professional: appointment.professional,
-    customer: { name: appointment.customer.name },
+    contact: { name: appointment.contact.name },
     manageableUntil: state.manageableUntil,
     canManage: state.canManage,
   };
+}
+
+// Respostas com o QR (e as do painel do WhatsApp em geral) nunca vão para cache.
+export const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" } as const;
+
+// Conexão do WhatsApp (guia 3, 7a, 7b): sem o id da sessão no provedor, que é a chave do webhook
+// (D8) e nunca vai para o navegador. O QR só aparece enquanto espera a leitura.
+export function whatsappConnectionDto(connection: ConnectionView | null) {
+  if (!connection) return { status: "not_configured" as const, lastCheckedAt: null, qr: null, live: true };
+  return {
+    status: connection.status,
+    lastCheckedAt: connection.lastCheckedAt,
+    qr: connection.qr ? { format: connection.qr.format, value: connection.qr.value, expiresAt: connection.qr.expiresAt } : null,
+    live: connection.live,
+  };
+}
+
+// Conversas e mensagens (D6, D7): somente leitura, mídia só como tipo, sem id externo do provedor.
+export function messageDto(message: MessageView) {
+  return {
+    id: message.id,
+    direction: message.direction,
+    body: message.body,
+    mediaType: message.mediaType,
+    status: message.status,
+    sentAt: message.sentAt,
+  };
+}
+
+export function conversationSummaryDto(conversation: ConversationSummary) {
+  return {
+    id: conversation.id,
+    lastMessageAt: conversation.lastMessageAt,
+    contact: conversation.contact,
+    lastMessage: conversation.lastMessage
+      ? {
+          direction: conversation.lastMessage.direction,
+          body: conversation.lastMessage.body,
+          mediaType: conversation.lastMessage.mediaType,
+          sentAt: conversation.lastMessage.sentAt,
+        }
+      : null,
+  };
+}
+
+export function conversationDto(conversation: ConversationDetails) {
+  return {
+    id: conversation.id,
+    lastMessageAt: conversation.lastMessageAt,
+    createdAt: conversation.createdAt,
+    contact: conversation.contact,
+  };
+}
+
+export function pageDto<T, R>(page: Page<T>, map: (item: T) => R) {
+  return { items: page.items.map(map), page: page.page, pageSize: page.pageSize, hasMore: page.hasMore };
 }

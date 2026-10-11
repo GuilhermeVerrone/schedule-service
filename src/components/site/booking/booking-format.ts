@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import { normalizePhone } from "@/server/validation/agenda-api";
+import { normalizePhone } from "@/lib/phone";
 
 // Datas do agendar e da gestão pelo link (guia 6, 7a, 7c; D11): a tela fala no fuso do negócio,
 // a API recebe e devolve instantes ISO em UTC. Conversão sempre pelo luxon.
@@ -79,9 +79,9 @@ export function formatDeadline(iso: string, timezone: string): string {
   return DateTime.fromISO(iso, { zone: timezone }).toFormat("dd/MM/yyyy 'às' HH:mm");
 }
 
-// Telefone do cliente: as mesmas regras da API (DDD + número, DDI 55 opcional).
+// Telefone do cliente: a mesma função da API (DDD + número; DDI 55 opcional, outro DDI com "+").
 export function isValidPhone(value: string): boolean {
-  return /^55\d{10,11}$/.test(normalizePhone(value));
+  return normalizePhone(value) !== null;
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

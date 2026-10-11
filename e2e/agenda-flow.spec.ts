@@ -83,7 +83,7 @@ test("agenda: dia, semana, agendamento manual, conflito, remarcar, concluir, can
   const day = dayInSaoPaulo(7);
   const book = async (professional: string, time: string, name: string, phone: string) => {
     const response = await page.request.post("/api/appointments", {
-      data: { professionalId: professionals[professional], serviceId, startsAt: at(day, time), customer: { name, phone } },
+      data: { professionalId: professionals[professional], serviceId, startsAt: at(day, time), contact: { name, phone } },
     });
     expect(response.status()).toBe(201);
     return (await response.json()).appointment.id as string;
@@ -92,7 +92,7 @@ test("agenda: dia, semana, agendamento manual, conflito, remarcar, concluir, can
     const query = new URLSearchParams({ from: at(day, "00:00"), to: at(dayInSaoPaulo(8), "00:00") });
     const response = await page.request.get(`/api/appointments?${query}`);
     expect(response.status()).toBe(200);
-    return (await response.json()).appointments as { customer: { name: string }; status: string; startsAt: string; professional: { name: string } }[];
+    return (await response.json()).appointments as { contact: { name: string }; status: string; startsAt: string; professional: { name: string } }[];
   };
   const slotsOfAna = async () => {
     const response = await page.request.get(`/api/availability?serviceId=${serviceId}&professionalId=${professionals.Ana}&date=${day}`);
@@ -169,9 +169,11 @@ test("agenda: dia, semana, agendamento manual, conflito, remarcar, concluir, can
     await expect(maria).toContainText("09:00");
     await expect(maria.getByRole("button", { name: /Maria Souza/ })).toHaveAttribute("aria-expanded", "true");
     await expect(maria).toContainText("(11) 98765-4321");
+    // Telefone guardado em E.164 (Fatia 3, D2): o link de ligar usa o número como está.
+    await expect(maria.getByRole("link", { name: "(11) 98765-4321" })).toHaveAttribute("href", "tel:+5511987654321");
     await expect(maria).toContainText("Corte, 30 min, R$ 50,00");
     const saved = await appointmentsOfDay();
-    expect(saved.map((item) => [item.customer.name, item.status, item.startsAt, item.professional.name])).toEqual([
+    expect(saved.map((item) => [item.contact.name, item.status, item.startsAt, item.professional.name])).toEqual([
       ["Maria Souza", "confirmed", at(day, "09:00"), "Ana"],
     ]);
     await expectNoHorizontalScroll(page);
@@ -207,7 +209,7 @@ test("agenda: dia, semana, agendamento manual, conflito, remarcar, concluir, can
     await expect(newForm.getByRole("button", { name: "10:30", exact: true })).toBeVisible();
     await expectNoHorizontalScroll(page);
     await shot(page, "06-conflito");
-    expect((await appointmentsOfDay()).map((item) => item.customer.name)).toEqual(["Maria Souza", "Outro Cliente"]);
+    expect((await appointmentsOfDay()).map((item) => item.contact.name)).toEqual(["Maria Souza", "Outro Cliente"]);
     await newForm.getByRole("button", { name: "Cancelar" }).click();
     await expect(newForm).toHaveCount(0);
   });
@@ -231,13 +233,13 @@ test("agenda: dia, semana, agendamento manual, conflito, remarcar, concluir, can
     await expect(form.getByRole("alert")).toContainText("Esse horário não está livre para Ana");
     await expectNoHorizontalScroll(page);
     await shot(page, "07-remarcar-conflito");
-    expect((await appointmentsOfDay()).find((item) => item.customer.name === "Maria Souza")?.startsAt).toBe(at(day, "09:00"));
+    expect((await appointmentsOfDay()).find((item) => item.contact.name === "Maria Souza")?.startsAt).toBe(at(day, "09:00"));
 
     await form.getByRole("button", { name: "11:00", exact: true }).click();
     await form.getByRole("button", { name: "Remarcar" }).click();
     await expect(toastWith(page, "Remarcado: Maria Souza")).toBeVisible();
     await expect(row(page, "Maria Souza")).toContainText("11:00");
-    expect((await appointmentsOfDay()).find((item) => item.customer.name === "Maria Souza")?.startsAt).toBe(at(day, "11:00"));
+    expect((await appointmentsOfDay()).find((item) => item.contact.name === "Maria Souza")?.startsAt).toBe(at(day, "11:00"));
     // O horário antigo ficou livre e o novo, ocupado.
     const slots = await slotsOfAna();
     expect(slots).toContain(at(day, "09:00"));
@@ -262,7 +264,7 @@ test("agenda: dia, semana, agendamento manual, conflito, remarcar, concluir, can
     await expect(joana.getByText("Cancelado").locator("visible=true").first()).toBeVisible();
     await expect(joana.getByRole("button", { name: "Cancelar agendamento" })).toHaveCount(0);
 
-    const statuses = Object.fromEntries((await appointmentsOfDay()).map((item) => [item.customer.name, item.status]));
+    const statuses = Object.fromEntries((await appointmentsOfDay()).map((item) => [item.contact.name, item.status]));
     expect(statuses).toEqual({ "Maria Souza": "confirmed", "Outro Cliente": "confirmed", "Pedro Alves": "completed", "Joana Reis": "canceled" });
     await expect(page.getByText("3 agendamentos")).toBeVisible();
     await expectNoHorizontalScroll(page);

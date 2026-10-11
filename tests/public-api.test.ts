@@ -155,7 +155,7 @@ function bookingBody(account: Account, startsAt: string, extra: Record<string, u
     serviceId: account.serviceId,
     professionalId: account.professionalId,
     startsAt,
-    customer: { name: "Cliente Público", phone: nextPhone() },
+    contact: { name: "Cliente Público", phone: nextPhone() },
     consent: true,
     ...extra,
   };
@@ -176,12 +176,12 @@ const confirmedAt = (account: Account, startsAt: string) =>
   prisma.appointment.count({ where: { tenantId: account.tenantId, status: "confirmed", startsAt: new Date(startsAt) } });
 
 async function snapshot(account: Account) {
-  const [tenant, appointments, customers] = await Promise.all([
+  const [tenant, appointments, contacts] = await Promise.all([
     prisma.tenant.findUnique({ where: { id: account.tenantId } }),
     prisma.appointment.findMany({ where: { tenantId: account.tenantId }, orderBy: { id: "asc" } }),
-    prisma.customer.findMany({ where: { tenantId: account.tenantId }, orderBy: { id: "asc" } }),
+    prisma.contact.findMany({ where: { tenantId: account.tenantId }, orderBy: { id: "asc" } }),
   ]);
-  return { tenant, appointments, customers };
+  return { tenant, appointments, contacts };
 }
 
 async function setSettings(account: Account, body: Record<string, unknown>) {
@@ -310,7 +310,7 @@ describe("disponibilidade por dia", () => {
     expect(before.length).toBe(37);
     const name = "Fulana Segredo da Silva";
     const phone = "(21) 99876-5432";
-    const created = await book(a, at(DAY, "09:00"), { customer: { name, phone, email: "fulana@segredo.dev" } });
+    const created = await book(a, at(DAY, "09:00"), { contact: { name, phone, email: "fulana@segredo.dev" } });
     expect(created.status).toBe(201);
 
     const query = new URLSearchParams({ serviceId: a.serviceId, date: DAY });
@@ -320,7 +320,7 @@ describe("disponibilidade por dia", () => {
       expect(Object.keys(body).sort()).toEqual(["date", "slots"]);
       for (const slot of body.slots) expect(Object.keys(slot).sort()).toEqual(["professionalIds", "startsAt"]);
       const text = JSON.stringify(body);
-      for (const secret of [name, "Fulana", "5521998765432", "99876", "fulana@segredo.dev", created.body.manageToken, a.tenantId, "customer", "appointment"]) {
+      for (const secret of [name, "Fulana", "5521998765432", "99876", "fulana@segredo.dev", created.body.manageToken, a.tenantId, "contact", "appointment"]) {
         expect(text).not.toContain(secret);
       }
     }
@@ -360,7 +360,7 @@ describe("fluxo completo: agendar, ver, remarcar e cancelar pelo token", () => {
   it("cria com token devolvido uma vez (só o hash no banco), consentimento e cliente por telefone normalizado", async () => {
     const startsAt = at(DAY, "14:00");
     const created = await book(a, startsAt, {
-      customer: { name: "  Maria Cliente  ", phone: "+55 (21) 97777-1234", email: "maria@cliente.dev" },
+      contact: { name: "  Maria Cliente  ", phone: "+55 (21) 97777-1234", email: "maria@cliente.dev" },
     });
     expect(created.status).toBe(201);
     const { appointment, manageToken, managePath } = created.body;
@@ -372,25 +372,25 @@ describe("fluxo completo: agendar, ver, remarcar e cancelar pelo token", () => {
       endsAt: new Date(new Date(startsAt).getTime() + 3_600_000).toISOString(),
       service: { id: a.serviceId, durationMinutes: 60 },
       professional: { id: a.professionalId },
-      customer: { name: "Maria Cliente" },
+      contact: { name: "Maria Cliente" },
       canManage: true,
     });
-    expect(Object.keys(appointment.customer)).toEqual(["name"]);
-    for (const hidden of ["id", "tenantId", "manageTokenHash", "customerId"]) expect(appointment).not.toHaveProperty(hidden);
+    expect(Object.keys(appointment.contact)).toEqual(["name"]);
+    for (const hidden of ["id", "tenantId", "manageTokenHash", "contactId"]) expect(appointment).not.toHaveProperty(hidden);
 
-    const row = await prisma.appointment.findFirstOrThrow({ where: { tenantId: a.tenantId, startsAt: new Date(startsAt) }, include: { customer: true } });
+    const row = await prisma.appointment.findFirstOrThrow({ where: { tenantId: a.tenantId, startsAt: new Date(startsAt) }, include: { contact: true } });
     expect(row.manageTokenHash).toBe(sha256(manageToken));
     expect(JSON.stringify(row)).not.toContain(manageToken);
-    expect(row.customer).toMatchObject({ name: "Maria Cliente", phone: "5521977771234", email: "maria@cliente.dev", consentSource: "public_booking" });
-    expect(row.customer.consentAt).toBeInstanceOf(Date);
+    expect(row.contact).toMatchObject({ name: "Maria Cliente", phone: "+5521977771234", email: "maria@cliente.dev", consentSource: "public_booking" });
+    expect(row.contact.consentAt).toBeInstanceOf(Date);
 
     // Mesmo telefone com outra máscara: o mesmo cliente, sem sobrescrever nome; outro token.
-    const again = await book(a, at(DAY, "16:00"), { customer: { name: "Outro Nome", phone: "21 97777-1234" } });
+    const again = await book(a, at(DAY, "16:00"), { contact: { name: "Outro Nome", phone: "21 97777-1234" } });
     expect(again.status).toBe(201);
     expect(again.body.manageToken).not.toBe(manageToken);
-    const second = await prisma.appointment.findFirstOrThrow({ where: { tenantId: a.tenantId, startsAt: new Date(at(DAY, "16:00")) }, include: { customer: true } });
-    expect(second.customerId).toBe(row.customerId);
-    expect(second.customer.name).toBe("Maria Cliente");
+    const second = await prisma.appointment.findFirstOrThrow({ where: { tenantId: a.tenantId, startsAt: new Date(at(DAY, "16:00")) }, include: { contact: true } });
+    expect(second.contactId).toBe(row.contactId);
+    expect(second.contact.name).toBe("Maria Cliente");
 
     // O token não volta em nenhuma leitura posterior.
     const view = await pub("GET", `/api/public/${a.slug}/appointments/${manageToken}`);
@@ -407,7 +407,7 @@ describe("fluxo completo: agendar, ver, remarcar e cancelar pelo token", () => {
     expect(view.status).toBe(200);
     expect(view.body.appointment).toMatchObject({ status: "confirmed", canManage: true, professional: { id: a.otherProfessionalId } });
     expect(new Date(view.body.appointment.manageableUntil).getTime()).toBe(new Date(at(DAY, "11:00")).getTime() - 2 * 3_600_000);
-    expect(Object.keys(view.body.appointment.customer)).toEqual(["name"]);
+    expect(Object.keys(view.body.appointment.contact)).toEqual(["name"]);
     expect(await slotTimes(a, DAY, a.otherProfessionalId)).not.toContain("11:00");
 
     const moved = await pub("POST", `${base}/reschedule`, { body: { startsAt: at(DAY, "15:00") } });
@@ -446,7 +446,7 @@ describe("fluxo completo: agendar, ver, remarcar e cancelar pelo token", () => {
     expect(created.status).toBe(201);
     expect([a.professionalId, a.otherProfessionalId]).toContain(created.body.appointment.professional.id);
     const omitted = await pub("POST", `/api/public/${a.slug}/appointments`, {
-      body: { serviceId: a.serviceId, startsAt: at(DAY, "12:00"), customer: { name: "Sem Prof", phone: nextPhone() }, consent: true },
+      body: { serviceId: a.serviceId, startsAt: at(DAY, "12:00"), contact: { name: "Sem Prof", phone: nextPhone() }, consent: true },
     });
     expect(omitted.status).toBe(201);
     expect(omitted.body.appointment.professional.id).not.toBe(created.body.appointment.professional.id);
@@ -474,11 +474,11 @@ describe("agendar: entradas inválidas e regras do cliente", () => {
       { ...valid, tenantId: b.tenantId },
       { ...valid, endsAt: at(DAY, "18:00") },
       { ...valid, manageTokenHash: sha256("x") },
-      { ...valid, customer: undefined },
-      { ...valid, customer: { name: "A", phone: nextPhone() } },
-      { ...valid, customer: { name: "Nome Ok", phone: "123" } },
-      { ...valid, customer: { name: "Nome Ok", phone: nextPhone(), email: "nao-email" } },
-      { ...valid, customer: { name: "Nome Ok", phone: nextPhone(), tenantId: b.tenantId } },
+      { ...valid, contact: undefined },
+      { ...valid, contact: { name: "A", phone: nextPhone() } },
+      { ...valid, contact: { name: "Nome Ok", phone: "123" } },
+      { ...valid, contact: { name: "Nome Ok", phone: nextPhone(), email: "nao-email" } },
+      { ...valid, contact: { name: "Nome Ok", phone: nextPhone(), tenantId: b.tenantId } },
       { ...valid, startsAt: "2026-10-20T13:00:00" },
       { ...valid, serviceId: undefined },
     ];

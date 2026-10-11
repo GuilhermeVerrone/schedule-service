@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizePhone } from "@/lib/phone";
 import { agendaSettingsSchema, normalizedPhoneSchema } from "@/server/validation/agenda";
 
 // Entrada das rotas do painel da agenda (guia 7d, 7e; D3, D4, D9). Datas chegam em ISO 8601 com
@@ -20,17 +21,13 @@ const bothDates = (a: unknown, b: unknown): boolean => a instanceof Date && b in
 
 const atLeastOneField = (value: object) => Object.values(value).some((field) => field !== undefined);
 
-// Telefone como o dono digita ("(11) 98765-4321", "+55 11 98765-4321"): sobra só os dígitos e,
-// sem DDI, ganha o 55. O resultado passa pela mesma regra do banco (55 + DDD + número).
-export function normalizePhone(value: string): string {
-  const digits = value.replace(/\D/g, "");
-  return digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
-}
-
-const phoneInput = z
-  .string({ error: "Informe o telefone do cliente." })
-  .transform(normalizePhone)
-  .pipe(normalizedPhoneSchema);
+// Telefone como a pessoa digita ("(11) 98765-4321", "+55 11 98765-4321") vira E.164 pela função
+// única (src/lib/phone.ts); o que não normaliza segue como veio e é recusado pelo schema.
+export const phoneInput = (error: string) =>
+  z
+    .string({ error })
+    .transform((value) => normalizePhone(value) ?? value)
+    .pipe(normalizedPhoneSchema);
 
 export const settingsBodySchema = agendaSettingsSchema.refine(atLeastOneField, {
   error: "Informe ao menos um campo para alterar.",
@@ -65,14 +62,14 @@ export const appointmentCreateSchema = z.object({
   professionalId: idField("o profissional"),
   serviceId: idField("o serviço"),
   startsAt: instant("Início"),
-  customer: z.object(
+  contact: z.object(
     {
       name: z
         .string({ error: "Informe o nome do cliente." })
         .trim()
         .min(2, { error: "Informe o nome do cliente." })
         .max(80, { error: "O nome do cliente pode ter no máximo 80 caracteres." }),
-      phone: phoneInput,
+      phone: phoneInput("Informe o telefone do cliente."),
       email: z
         .string()
         .trim()

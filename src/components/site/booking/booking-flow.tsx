@@ -151,7 +151,7 @@ export function BookingFlow({
       serviceId: service.id,
       professionalId,
       startsAt: slot.startsAt,
-      customer: { name: form.name.trim(), phone: form.phone, email: form.email.trim() || null },
+      contact: { name: form.name.trim(), phone: form.phone, email: form.email.trim() || null },
       consent: true,
     });
     setPending(false);
@@ -327,7 +327,7 @@ function BookingDone({
         Agendamento confirmado
       </h2>
       <p className="mt-4 max-w-[60ch] text-lead text-ink-2">
-        {appointment.customer.name}, seu horário está reservado. Guarde o link abaixo.
+        {appointment.contact.name}, seu horário está reservado. Guarde o link abaixo.
       </p>
 
       <div className="mt-8">

@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { normalizedPhoneSchema } from "@/server/validation/agenda";
-import { availabilityQuerySchema, normalizePhone } from "@/server/validation/agenda-api";
+import { availabilityQuerySchema, phoneInput } from "@/server/validation/agenda-api";
 
 // Entrada das rotas públicas (guia 6, 7a, 7c; D5, D6). Corpos estritos: campo a mais (como um
 // tenantId) é recusado com 400, e o tenant vem só do slug da URL.
@@ -18,17 +17,14 @@ export const publicBookingSchema = z.strictObject({
   // null ou ausente: "qualquer profissional disponível".
   professionalId: z.string().min(1).nullish(),
   startsAt: instant,
-  customer: z.strictObject(
+  contact: z.strictObject(
     {
       name: z
         .string({ error: "Informe seu nome." })
         .trim()
         .min(2, { error: "Informe seu nome." })
         .max(80, { error: "O nome pode ter no máximo 80 caracteres." }),
-      phone: z
-        .string({ error: "Informe seu telefone com DDD." })
-        .transform(normalizePhone)
-        .pipe(normalizedPhoneSchema),
+      phone: phoneInput("Informe seu telefone com DDD."),
       email: z
         .string()
         .trim()

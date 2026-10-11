@@ -137,10 +137,10 @@ export interface ManualAppointmentInput {
   professionalId: string;
   serviceId: string;
   startsAt: Date;
-  customer: { name: string; phone: string; email?: string | null };
+  contact: { name: string; phone: string; email?: string | null };
 }
 
-// Agendamento manual do dono: cliente reencontrado pelo telefone normalizado, sem consentimento
+// Agendamento manual do dono: contato reencontrado pelo telefone normalizado, sem consentimento
 // registrado (só o formulário público registra) e sem link de gestão.
 export async function createManualAppointment(
   repo: TenantRepository,
@@ -152,11 +152,11 @@ export async function createManualAppointment(
   if (!bookable) return null;
   const { durationMinutes } = bookable.service;
   await assertSlotFree(repo, settings, input.professionalId, input.startsAt, durationMinutes, now);
-  const customer = await repo.customers.findOrCreateByPhone(input.customer);
+  const contact = await repo.contacts.findOrCreateByPhone(input.contact);
   return repo.appointments.create({
     professionalId: input.professionalId,
     serviceId: input.serviceId,
-    customerId: customer.id,
+    contactId: contact.id,
     startsAt: input.startsAt,
     endsAt: new Date(input.startsAt.getTime() + durationMinutes * MINUTE_MS),
   });

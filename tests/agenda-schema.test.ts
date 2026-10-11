@@ -20,7 +20,7 @@ interface Fixture {
   professionalA: string;
   professionalB: string;
   serviceId: string;
-  customerId: string;
+  contactId: string;
 }
 
 let a: Fixture;
@@ -51,9 +51,9 @@ async function createFixture(label: string): Promise<Fixture> {
        values (gen_random_uuid(), $1, 'Corte', 60, 5000, now())`,
       [tenantId],
     ),
-    customerId: await insertReturningId(
-      `insert into customers (id, tenant_id, name, phone, updated_at) values (gen_random_uuid(), $1, 'Cliente', $2, now())`,
-      [tenantId, "5511987654321"],
+    contactId: await insertReturningId(
+      `insert into contacts (id, tenant_id, name, phone, updated_at) values (gen_random_uuid(), $1, 'Cliente', $2, now())`,
+      [tenantId, "+5511987654321"],
     ),
   };
 }
@@ -61,7 +61,7 @@ async function createFixture(label: string): Promise<Fixture> {
 interface NewAppointment {
   tenantId?: string;
   professionalId?: string;
-  customerId?: string;
+  contactId?: string;
   start: string;
   end: string;
   status?: "confirmed" | "canceled" | "completed";
@@ -69,13 +69,13 @@ interface NewAppointment {
 
 function insertAppointment(f: Fixture, input: NewAppointment): Promise<string> {
   return insertReturningId(
-    `insert into appointments (id, tenant_id, professional_id, service_id, customer_id, starts_at, ends_at, status, updated_at)
+    `insert into appointments (id, tenant_id, professional_id, service_id, contact_id, starts_at, ends_at, status, updated_at)
      values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::appointment_status, now())`,
     [
       input.tenantId ?? f.tenantId,
       input.professionalId ?? f.professionalA,
       f.serviceId,
-      input.customerId ?? f.customerId,
+      input.contactId ?? f.contactId,
       input.start,
       input.end,
       input.status ?? "confirmed",
@@ -154,8 +154,8 @@ describe("appointments_no_overlap (EXCLUDE gist, só confirmed)", () => {
     const other = new pg.Client({ connectionString: process.env.DATABASE_URL });
     await other.connect();
     try {
-      const params = [a.tenantId, a.professionalA, a.serviceId, a.customerId, at(6, "10:00"), at(6, "11:00")];
-      const sql = `insert into appointments (id, tenant_id, professional_id, service_id, customer_id, starts_at, ends_at, updated_at)
+      const params = [a.tenantId, a.professionalA, a.serviceId, a.contactId, at(6, "10:00"), at(6, "11:00")];
+      const sql = `insert into appointments (id, tenant_id, professional_id, service_id, contact_id, starts_at, ends_at, updated_at)
                    values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now())`;
       const results = await Promise.allSettled([client.query(sql, params), other.query(sql, params)]);
       expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
@@ -173,7 +173,7 @@ describe("integridade dos agendamentos e bloqueios", () => {
       await pgErrorCode(insertAppointment(a, { professionalId: b.professionalA, start: at(7, "10:00"), end: at(7, "11:00") })),
     ).toBe(FK_VIOLATION);
     expect(
-      await pgErrorCode(insertAppointment(a, { customerId: b.customerId, start: at(7, "12:00"), end: at(7, "13:00") })),
+      await pgErrorCode(insertAppointment(a, { contactId: b.contactId, start: at(7, "12:00"), end: at(7, "13:00") })),
     ).toBe(FK_VIOLATION);
     expect(
       await pgErrorCode(
@@ -223,7 +223,7 @@ describe("integridade dos agendamentos e bloqueios", () => {
     await client.query(`delete from tenants where id = $1`, [f.tenantId]);
     const { rows } = await client.query<{ total: number }>(
       `select (select count(*) from appointments where tenant_id = $1)
-            + (select count(*) from customers where tenant_id = $1)
+            + (select count(*) from contacts where tenant_id = $1)
             + (select count(*) from time_blocks where tenant_id = $1) as total`,
       [f.tenantId],
     );
@@ -242,17 +242,21 @@ describe("integridade dos agendamentos e bloqueios", () => {
 });
 
 describe("cliente e parâmetros do tenant", () => {
-  it("telefone do cliente só com dígitos e DDI 55; único por tenant", async () => {
+  it("telefone do contato em E.164 (+ e 10 a 15 dígitos); único por tenant", async () => {
     const insert = (tenantId: string, phone: string) =>
       client.query(
-        `insert into customers (id, tenant_id, name, phone, updated_at) values (gen_random_uuid(), $1, 'X', $2, now())`,
+        `insert into contacts (id, tenant_id, name, phone, updated_at) values (gen_random_uuid(), $1, 'X', $2, now()) returning opt_out, last_inbound_at`,
         [tenantId, phone],
       );
-    expect(await pgErrorCode(insert(a.tenantId, "11987654321"))).toBe(CHECK_VIOLATION);
-    expect(await pgErrorCode(insert(a.tenantId, "+5511987654321"))).toBe(CHECK_VIOLATION);
-    expect(await pgErrorCode(insert(a.tenantId, "5511987654321"))).toBe("23505");
-    // O mesmo telefone em outro negócio é outro cliente.
-    await expect(insert(b.tenantId, "5521987654321")).resolves.toBeTruthy();
+    for (const phone of ["11987654321", "5511987654321", "+0511987654321", "+123456789", "+1234567890123456", "+55 11987654321"]) {
+      expect(await pgErrorCode(insert(a.tenantId, phone))).toBe(CHECK_VIOLATION);
+    }
+    expect(await pgErrorCode(insert(a.tenantId, "+5511987654321"))).toBe("23505");
+    // Número de fora do Brasil (D11) e o mesmo telefone em outro negócio, que é outro contato.
+    await expect(insert(a.tenantId, "+14155552671")).resolves.toBeTruthy();
+    const other = await insert(b.tenantId, "+5521987654321");
+    // Sem opt-out e sem mensagem recebida ao nascer.
+    expect(other.rows[0]).toEqual({ opt_out: false, last_inbound_at: null });
   });
 
   it("parâmetros da agenda nascem com os padrões (D3)", async () => {

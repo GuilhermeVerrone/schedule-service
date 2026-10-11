@@ -55,7 +55,7 @@ export interface PublicAppointment {
   canceledAt: string | null;
   service: { id: string; name: string; durationMinutes: number; priceCents: number };
   professional: { id: string; name: string };
-  customer: { name: string };
+  contact: { name: string };
   manageableUntil: string;
   canManage: boolean;
 }
@@ -64,7 +64,7 @@ export interface BookingInput {
   serviceId: string;
   professionalId: string | null;
   startsAt: string;
-  customer: { name: string; phone: string; email: string | null };
+  contact: { name: string; phone: string; email: string | null };
   consent: true;
 }
 

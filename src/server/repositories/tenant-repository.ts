@@ -2,12 +2,15 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { isId, TenantScopeError, type TenantScope } from "./shared";
 import { createAppointmentsRepository } from "./tenant/appointments";
-import { createCustomersRepository } from "./tenant/customers";
+import { createContactsRepository } from "./tenant/contacts";
+import { createConversationsRepository } from "./tenant/conversations";
+import { createMessagesRepository } from "./tenant/messages";
 import { createProfessionalServicesRepository } from "./tenant/professional-services";
 import { createProfessionalsRepository } from "./tenant/professionals";
 import { createServicesRepository } from "./tenant/services";
 import { createSettingsRepository, createTenantInfoRepository } from "./tenant/settings";
 import { createTimeBlocksRepository } from "./tenant/time-blocks";
+import { createWhatsAppConnectionRepository } from "./tenant/whatsapp-connection";
 import { createWorkingHoursRepository } from "./tenant/working-hours";
 
 // Único ponto de acesso aos dados de negócio (guia 6, D2). Só se constrói com um tenantId,
@@ -19,7 +22,7 @@ export type { ProfessionalInput } from "./tenant/professionals";
 export type { ServiceInput } from "./tenant/services";
 export { WorkingHoursOverlapError } from "./tenant/working-hours";
 export type { AgendaSettings } from "./tenant/settings";
-export type { ConsentInput } from "./tenant/customers";
+export type { ConsentInput } from "./tenant/contacts";
 export {
   AppointmentConflictError,
   AppointmentStatusError,
@@ -29,6 +32,15 @@ export {
   type RescheduleInput,
 } from "./tenant/appointments";
 export type { TimeBlockRangeQuery } from "./tenant/time-blocks";
+export { SessionIdTakenError } from "./tenant/whatsapp-connection";
+export type {
+  ConversationContact,
+  ConversationDetails,
+  ConversationSummary,
+  LastMessage,
+  Page,
+} from "./tenant/conversations";
+export type { MessageView } from "./tenant/messages";
 
 export function createTenantRepository(tenantId: string, db: PrismaClient = prisma) {
   if (!isId(tenantId)) throw new TenantScopeError();
@@ -42,9 +54,12 @@ export function createTenantRepository(tenantId: string, db: PrismaClient = pris
     services: createServicesRepository(scope),
     professionalServices: createProfessionalServicesRepository(scope),
     workingHours: createWorkingHoursRepository(scope),
-    customers: createCustomersRepository(scope),
+    contacts: createContactsRepository(scope),
     appointments: createAppointmentsRepository(scope),
     timeBlocks: createTimeBlocksRepository(scope),
+    whatsappConnection: createWhatsAppConnectionRepository(scope),
+    conversations: createConversationsRepository(scope),
+    messages: createMessagesRepository(scope),
   };
 }
 

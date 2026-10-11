@@ -7,9 +7,12 @@
 // - (tenant_id, id) em professionals/services para FKs compostas: vínculos e horários
 //   nunca apontam para registro de outro tenant, nem por bug no código.
 // - tenants: faixas dos 5 parâmetros da agenda; slugs reservados renomeados na migração
-// - customers: telefone só dígitos com DDI 55
+// - contacts: telefone em E.164 ("+" e 10 a 15 dígitos; regras do Brasil em src/lib/phone.ts)
 // - appointments/time_blocks: fim > início; appointments sem sobreposição `confirmed` por
 //   profissional (EXCLUDE gist sobre tstzrange [início, fim))
+// - whatsapp_connections/messages/webhook_events: status, direção e tipo de mídia em CHECK
+//   (texto, não enum); contadores e limites diários não negativos; mensagem recebida sempre
+//   com id externo; mensagem com texto ou mídia.
 
 generator client {
   provider = "prisma-client"
@@ -59,9 +62,13 @@ model Tenant {
   services             Service[]
   professionalServices ProfessionalService[]
   workingHours         WorkingHours[]
-  customers            Customer[]
+  contacts             Contact[]
   appointments         Appointment[]
   timeBlocks           TimeBlock[]
+  whatsAppConnection   WhatsAppConnection?
+  conversations        Conversation[]
+  messages             Message[]
+  webhookEvents        WebhookEvent[]
 
   @@map("tenants")
 }
@@ -190,37 +197,43 @@ model WorkingHours {
   @@map("working_hours")
 }
 
-// Cliente final do negócio (D5), sem login. Reencontrado pelo telefone normalizado.
-model Customer {
+// Contato do negócio (D5 da Fatia 2; D1 da Fatia 3): cliente final, sem login, que agenda pelo
+// link ou escreve pelo WhatsApp. Reencontrado pelo telefone normalizado.
+model Contact {
   id            String    @id @default(uuid(7)) @db.Uuid
   tenantId      String    @map("tenant_id") @db.Uuid
   name          String
-  // Só dígitos, com DDI 55 (ex.: 5511987654321).
+  // E.164 com "+" e DDI (ex.: +5511987654321), sempre por normalizePhone (src/lib/phone.ts).
   phone         String
   email         String?
   // LGPD: quando e por onde o consentimento foi dado (ex.: "public_booking"). Nulo em cadastro manual sem consentimento.
   consentAt     DateTime? @map("consent_at") @db.Timestamptz(3)
   consentSource String?   @map("consent_source")
+  // Pediu para não receber mensagens ("SAIR"); vale até reativar. Uso na Fatia 4.
+  optOut        Boolean   @default(false) @map("opt_out")
+  // Última mensagem recebida do contato pelo WhatsApp (elegibilidade de 30 dias).
+  lastInboundAt DateTime? @map("last_inbound_at") @db.Timestamptz(3)
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  appointments Appointment[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments  Appointment[]
+  conversations Conversation[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, phone])
-  @@map("customers")
+  @@map("contacts")
 }
 
 // Agendamento (D4). Só `confirmed` ocupa horário; a sobreposição é barrada no banco.
-// Profissional, serviço e cliente não são apagados com agendamentos (NO ACTION): arquiva-se,
+// Profissional, serviço e contato não são apagados com agendamentos (NO ACTION): arquiva-se,
 // e o histórico sobrevive. Apagar o tenant leva tudo em cascata.
 model Appointment {
   id              String            @id @default(uuid(7)) @db.Uuid
   tenantId        String            @map("tenant_id") @db.Uuid
   professionalId  String            @map("professional_id") @db.Uuid
   serviceId       String            @map("service_id") @db.Uuid
-  customerId      String            @map("customer_id") @db.Uuid
+  contactId       String            @map("contact_id") @db.Uuid
   startsAt        DateTime          @map("starts_at") @db.Timestamptz(3)
   endsAt          DateTime          @map("ends_at") @db.Timestamptz(3)
   status          AppointmentStatus @default(confirmed)
@@ -234,12 +247,12 @@ model Appointment {
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   professional Professional @relation(fields: [tenantId, professionalId], references: [tenantId, id], onDelete: NoAction)
   service      Service      @relation(fields: [tenantId, serviceId], references: [tenantId, id], onDelete: NoAction)
-  customer     Customer     @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: NoAction)
+  contact      Contact      @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: NoAction)
 
   @@unique([tenantId, id])
   @@index([tenantId, professionalId, startsAt])
   @@index([tenantId, startsAt])
-  @@index([tenantId, customerId])
+  @@index([tenantId, contactId])
   @@map("appointments")
 }
 
@@ -273,4 +286,93 @@ model RateLimitHit {
   @@index([bucket, key, createdAt])
   @@index([createdAt])
   @@map("rate_limit_hits")
+}
+
+// Conexão do WhatsApp não oficial (Fatia 3), no máximo uma por tenant.
+// status: connected | disconnected | qr_pending | banned_suspected (CHECK na migração).
+// O tenant do webhook é resolvido só por session_id (D8): único, gerado pelo servidor e imprevisível.
+model WhatsAppConnection {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  tenantId       String    @unique @map("tenant_id") @db.Uuid
+  status         String    @default("disconnected")
+  sessionId      String    @unique @map("session_id")
+  // Última consulta de saúde da conexão no provedor.
+  lastCheckedAt  DateTime? @map("last_checked_at") @db.Timestamptz(3)
+  // Teto diário de envios (uso na Fatia 4): contador do dia `daily_count_date` (no fuso do tenant),
+  // zerado quando o dia muda, e limite configurável.
+  dailySentCount Int       @default(0) @map("daily_sent_count")
+  dailyCountDate DateTime? @map("daily_count_date") @db.Date
+  dailySendLimit Int       @default(100) @map("daily_send_limit")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_connections")
+}
+
+// Conversa do WhatsApp: uma por contato. Apagar o contato apaga a conversa e as mensagens (LGPD).
+model Conversation {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  contactId     String    @map("contact_id") @db.Uuid
+  // Ordena a lista de conversas; o texto da última mensagem vem de messages.
+  lastMessageAt DateTime? @map("last_message_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact  Contact   @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, contactId])
+  @@index([tenantId, lastMessageAt(sort: Desc)])
+  @@map("conversations")
+}
+
+// Mensagem do WhatsApp. direction: inbound | outbound. status: received (toda recebida) ou
+// pending | sent | delivered | read | failed (enviadas). Mídia só pelo tipo (D7): image | audio |
+// video | document | sticker | other, sem arquivo. external_id é o id no provedor: idempotência
+// por tenant; nulo só em enviada que o provedor ainda não confirmou.
+model Message {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  direction      String
+  body           String?
+  mediaType      String?  @map("media_type")
+  status         String
+  externalId     String?  @map("external_id")
+  // Horário da mensagem no provedor (ou do envio); ordena a conversa.
+  sentAt         DateTime @map("sent_at") @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [tenantId, conversationId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, externalId])
+  @@index([tenantId, conversationId, sentAt(sort: Desc)])
+  @@map("messages")
+}
+
+// Evento de webhook já recebido (idempotência, D3/D8): (source, event_id) único. Só é gravado
+// depois de resolver o tenant (por session_id, no WhatsApp); sem payload, para não guardar conteúdo.
+model WebhookEvent {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  // Provedor de origem, em minúsculas (ex.: "akg").
+  source      String
+  eventId     String    @map("event_id")
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([source, eventId])
+  @@index([tenantId, createdAt])
+  @@map("webhook_events")
 }

@@ -12,7 +12,7 @@ export interface AppointmentDto {
   canceledAt: string | null;
   professional: { id: string; name: string };
   service: { id: string; name: string; durationMinutes: number; priceCents: number };
-  customer: { id: string; name: string; phone: string };
+  contact: { id: string; name: string; phone: string };
 }
 
 export interface TimeBlockDto {
@@ -107,13 +107,6 @@ export function conflictMessage(code: string, message: string, professionalName?
 }
 
 export const isConflict = (code: string) => code === "appointment_conflict" || code === "slot_unavailable";
-
-// "5511987654321" → "(11) 98765-4321".
-export function formatPhone(phone: string): string {
-  const local = phone.startsWith("55") ? phone.slice(2) : phone;
-  const match = /^(\d{2})(\d{4,5})(\d{4})$/.exec(local);
-  return match ? `(${match[1]}) ${match[2]}-${match[3]}` : phone;
-}
 
 export const STATUS_LABEL: Record<AppointmentStatus, string> = {
   confirmed: "Confirmado",

@@ -169,10 +169,10 @@ export function ManageAppointment({
         </h1>
         <p className="max-w-[60ch] text-lead text-ink-2">
           {appointment.status === "canceled"
-            ? `${appointment.customer.name}, este agendamento foi cancelado.`
+            ? `${appointment.contact.name}, este agendamento foi cancelado.`
             : appointment.status === "completed"
-              ? `${appointment.customer.name}, este atendimento já foi concluído.`
-              : `${appointment.customer.name}, seu horário em ${business.name} está confirmado.`}
+              ? `${appointment.contact.name}, este atendimento já foi concluído.`
+              : `${appointment.contact.name}, seu horário em ${business.name} está confirmado.`}
         </p>
       </div>
 

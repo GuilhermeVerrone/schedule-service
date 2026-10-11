@@ -56,5 +56,5 @@ export const professionalExists = async ({ tenantId, db }: TenantScope, id: stri
 export const serviceExists = async ({ tenantId, db }: TenantScope, id: string): Promise<boolean> =>
   isId(id) && (await db.service.count({ where: { id, tenantId } })) > 0;
 
-export const customerExists = async ({ tenantId, db }: TenantScope, id: string): Promise<boolean> =>
-  isId(id) && (await db.customer.count({ where: { id, tenantId } })) > 0;
+export const contactExists = async ({ tenantId, db }: TenantScope, id: string): Promise<boolean> =>
+  isId(id) && (await db.contact.count({ where: { id, tenantId } })) > 0;

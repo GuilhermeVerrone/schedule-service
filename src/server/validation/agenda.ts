@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isNormalizedPhone } from "@/lib/phone";
 
 // Entrada dos repositórios da agenda (guia 5, D3, D5). As faixas espelham os CHECKs da migração
 // 20261010035347_agenda_link_publico: o Zod barra antes, o banco garante mesmo contornando o código.
@@ -45,20 +46,21 @@ export const agendaSettingsSchema = z
 
 export type AgendaSettingsInput = z.input<typeof agendaSettingsSchema>;
 
-// Telefone já normalizado (só dígitos, DDI 55), igual ao CHECK customers_phone_check.
+// Telefone já normalizado por normalizePhone (E.164, ex.: +5511987654321); o banco confere o
+// formato geral no CHECK contacts_phone_check.
 export const normalizedPhoneSchema = z
   .string()
-  .regex(/^55\d{10,11}$/, { error: "Telefone deve ter só dígitos, com DDI 55 e DDD." });
+  .refine(isNormalizedPhone, { error: "Telefone deve estar em E.164, com + e DDI (ex.: +5511987654321)." });
 
-export const customerSchema = z.object({
+export const contactSchema = z.object({
   name: z.string().trim().min(2, { error: "Informe o nome do cliente." }).max(80),
   phone: normalizedPhoneSchema,
   email: z.email({ error: "E-mail inválido." }).max(254).nullish(),
 });
 
-export const customerUpdateSchema = customerSchema.partial();
+export const contactUpdateSchema = contactSchema.partial();
 
-export type CustomerInput = z.input<typeof customerSchema>;
+export type ContactInput = z.input<typeof contactSchema>;
 
 // Intervalo [início, fim) em UTC.
 export const dateRangeSchema = z

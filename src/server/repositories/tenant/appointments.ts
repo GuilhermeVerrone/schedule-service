@@ -1,7 +1,7 @@
 import type { AppointmentStatus, Prisma } from "@/generated/prisma/client";
 import { dateRangeSchema, type DateRange } from "@/server/validation/agenda";
 import {
-  customerExists,
+  contactExists,
   isConstraintViolation,
   isId,
   professionalExists,
@@ -40,7 +40,7 @@ function rethrowConflict(error: unknown): never {
 const details = {
   professional: { select: { id: true, name: true } },
   service: { select: { id: true, name: true, durationMinutes: true, priceCents: true } },
-  customer: { select: { id: true, name: true, phone: true } },
+  contact: { select: { id: true, name: true, phone: true } },
 } as const satisfies Prisma.AppointmentInclude;
 
 export type AppointmentDetails = Prisma.AppointmentGetPayload<{ include: typeof details }>;
@@ -48,7 +48,7 @@ export type AppointmentDetails = Prisma.AppointmentGetPayload<{ include: typeof 
 export interface AppointmentInput extends DateRange {
   professionalId: string;
   serviceId: string;
-  customerId: string;
+  contactId: string;
   // SHA-256 (hex) do token do link de gestão (D6); ausente no agendamento manual do dono.
   manageTokenHash?: string | null;
 }
@@ -119,26 +119,26 @@ export function createAppointmentsRepository(scope: TenantScope) {
       return db.appointment.findFirst({ where: { tenantId, manageTokenHash: tokenHash }, include: details });
     },
 
-    // null se profissional, serviço ou cliente não forem do tenant. Regras de negócio (arquivado,
+    // null se profissional, serviço ou contato não forem do tenant. Regras de negócio (arquivado,
     // vínculo, horário livre) ficam para quem chama; aqui só a posse e a sobreposição.
     async create(input: AppointmentInput): Promise<AppointmentDetails | null> {
       const { startsAt, endsAt } = dateRangeSchema.parse(input);
       if (input.manageTokenHash != null && !TOKEN_HASH.test(input.manageTokenHash)) {
         throw new TypeError("manageTokenHash deve ser SHA-256 em hexadecimal");
       }
-      const [professional, service, customer] = await Promise.all([
+      const [professional, service, contact] = await Promise.all([
         professionalExists(scope, input.professionalId),
         serviceExists(scope, input.serviceId),
-        customerExists(scope, input.customerId),
+        contactExists(scope, input.contactId),
       ]);
-      if (!professional || !service || !customer) return null;
+      if (!professional || !service || !contact) return null;
       try {
         return await db.appointment.create({
           data: {
             tenantId,
             professionalId: input.professionalId,
             serviceId: input.serviceId,
-            customerId: input.customerId,
+            contactId: input.contactId,
             startsAt,
             endsAt,
             manageTokenHash: input.manageTokenHash ?? null,

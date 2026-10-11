@@ -11,7 +11,7 @@ import { CONTROL } from "@/components/painel/settings/fields";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/components/painel/catalog/api-client";
 import { cn } from "@/lib/utils";
-import { normalizePhone } from "@/server/validation/agenda-api";
+import { normalizePhone } from "@/lib/phone";
 import {
   conflictMessage,
   isConflict,
@@ -228,7 +228,7 @@ export function AppointmentForm({
     else if (date && !startsAt) found.time = "Esse horário não existe nesse dia. Escolha outro.";
     if (name.length < 2) found.name = "Informe o nome do cliente.";
     else if (name.length > 80) found.name = "O nome pode ter no máximo 80 caracteres.";
-    if (!/^55\d{10,11}$/.test(phone)) found.phone = "Informe o telefone com DDD, por exemplo (11) 98765-4321.";
+    if (!phone) found.phone = "Informe o telefone com DDD, por exemplo (11) 98765-4321.";
     if (email && !EMAIL.test(email)) found.email = "Confira o e-mail, por exemplo nome@exemplo.com.";
     if (Object.keys(found).length > 0) {
       setErrors(found);
@@ -242,7 +242,7 @@ export function AppointmentForm({
       serviceId,
       professionalId,
       startsAt,
-      customer: { name, phone, email: email || null },
+      contact: { name, phone, email: email || null },
     });
     setPending(false);
     if (result.ok) {
@@ -426,7 +426,7 @@ export function RescheduleForm({
       ref={formRef}
       onSubmit={handleSubmit}
       noValidate
-      aria-label={`Remarcar ${appointment.customer.name}`}
+      aria-label={`Remarcar ${appointment.contact.name}`}
       className="flex flex-col gap-6"
     >
       <FormTitle detail={`Mesmo profissional e mesma duração (${formatDuration(minutes)}). O horário atual fica livre.`}>Remarcar</FormTitle>
