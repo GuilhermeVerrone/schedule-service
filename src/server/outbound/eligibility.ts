@@ -1,4 +1,8 @@
-import type { EligibilityFacts, TenantRepository } from "@/server/repositories/tenant-repository";
+import type {
+  EligibilityFacts,
+  OptOutConfirmationFacts,
+  TenantRepository,
+} from "@/server/repositories/tenant-repository";
 
 // Elegibilidade para mensagem proativa (regra inegociável do produto; guia 6; D13). Elegível se
 // (a) escreveu nos últimos 30 dias, OU (b) tem agendamento `confirmed`, plano ou cobrança ativa,
@@ -35,4 +39,35 @@ export async function isContactEligibleForProactive(
   now: Date = new Date(),
 ): Promise<Eligibility> {
   return evaluateEligibility(await repo.eligibility.findFacts(contactId), now);
+}
+
+// Confirmação de opt-out (D15): a única mensagem para quem pediu para não receber. Vale como
+// resposta à mensagem que o contato acabou de mandar (regra a), só enquanto o opt-out continua
+// (quem já escreveu `VOLTAR` não recebe "você saiu") e só uma vez por contato.
+export type OptOutConfirmationEligibility =
+  | { eligible: true; reason: "recent_inbound" }
+  | {
+      eligible: false;
+      reason: "contact_not_found" | "not_opted_out" | "optout_confirmation_already_sent" | "not_eligible";
+    };
+
+export function evaluateOptOutConfirmation(
+  facts: OptOutConfirmationFacts | null,
+  now: Date,
+): OptOutConfirmationEligibility {
+  if (!facts) return { eligible: false, reason: "contact_not_found" };
+  if (!facts.optOut) return { eligible: false, reason: "not_opted_out" };
+  if (facts.optOutConfirmationSentAt) return { eligible: false, reason: "optout_confirmation_already_sent" };
+  if (facts.lastInboundAt && now.getTime() - facts.lastInboundAt.getTime() <= RECENT_INBOUND_WINDOW_MS) {
+    return { eligible: true, reason: "recent_inbound" };
+  }
+  return { eligible: false, reason: "not_eligible" };
+}
+
+export async function isOptOutConfirmationAllowed(
+  repo: Pick<TenantRepository, "eligibility">,
+  contactId: string,
+  now: Date = new Date(),
+): Promise<OptOutConfirmationEligibility> {
+  return evaluateOptOutConfirmation(await repo.eligibility.findOptOutConfirmationFacts(contactId), now);
 }

@@ -232,30 +232,39 @@ describe("fila e worker de envio", () => {
   });
 
   it("bloqueio por inelegível: registrado com o motivo, sem sendText e sem gastar o teto", async () => {
+    // Proativo para contato em opt-out, mesmo com agendamento `confirmed` e consentimento: opt_out
+    // vence. "Sem regra" (not_eligible) com proativo: teste do agendamento cancelado, abaixo.
+    // A confirmação de opt-out tem regra própria (D15, Fase 7): para quem não está em opt-out sai
+    // not_opted_out, e para quem está, mas não escreveu nos últimos 30 dias, not_eligible.
+    const { contact: saiu, input } = await confirmation(main);
+    await prisma.contact.update({ where: { id: saiu.id }, data: { optOut: true, consentAt: new Date() } });
     const semRegra = await contact(main);
-    const saiu = await contact(main, { optOut: true, consentAt: new Date() });
-    const results = await Promise.all(
-      [semRegra, saiu].map((c) =>
-        enqueueMessage(
-          {
-            tenantId: main.tenant.id,
-            contactId: c.id,
-            messageType: "optout_confirmation",
-            idempotencyKey: `teste-inelegivel:${c.id}`,
-          },
-          { queue },
-        ),
-      ),
-    );
+    const saiuSemMensagem = await contact(main, { optOut: true, consentAt: new Date() });
+    const optOutConfirmation = (c: Contact) =>
+      enqueueMessage(
+        {
+          tenantId: main.tenant.id,
+          contactId: c.id,
+          messageType: "optout_confirmation",
+          idempotencyKey: `teste-inelegivel:${c.id}`,
+        },
+        { queue },
+      );
+    const results = await Promise.all([
+      enqueueMessage(input, { queue }),
+      optOutConfirmation(semRegra),
+      optOutConfirmation(saiuSemMensagem),
+    ]);
     const rows = await Promise.all(
       results.map((r) => settle(main, (r as { outboundMessageId: string }).outboundMessageId)),
     );
     expect(rows.map((r) => [r.status, r.blockReason])).toEqual([
-      ["blocked", "not_eligible"],
       ["blocked", "opt_out"],
+      ["blocked", "not_opted_out"],
+      ["blocked", "not_eligible"],
     ]);
     expect(rows.every((r) => r.sentAt === null && r.channel === null)).toBe(true);
-    expect([...sentTo(semRegra.phone), ...sentTo(saiu.phone)]).toEqual([]);
+    expect([saiu, semRegra, saiuSemMensagem].flatMap((c) => sentTo(c.phone))).toEqual([]);
     expect((await counter(main)).sentCount).toBe(0);
   });
 

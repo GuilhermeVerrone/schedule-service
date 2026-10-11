@@ -5,7 +5,7 @@ import { isId } from "@/server/repositories/shared";
 import { createTenantRepository, type TenantRepository } from "@/server/repositories/tenant-repository";
 import { WhatsAppProviderError, type WhatsAppProvider } from "@/server/whatsapp";
 import { buildMessageContent } from "./content";
-import { isContactEligibleForProactive } from "./eligibility";
+import { isContactEligibleForProactive, isOptOutConfirmationAllowed } from "./eligibility";
 import { isMessageType } from "./templates";
 import { OUTBOUND_QUEUE, retryDelayMs, RETRY_DELAYS_MS, type OutboundJobData } from "./queue";
 import { evaluateSendPolicy, nextSendAllowedAt, type SendDecision } from "./send-policy";
@@ -15,7 +15,7 @@ import { createTenantThrottle, type TenantThrottle } from "./tenant-throttle";
 // chama `sendText` (teste de varredura). A cada tentativa, nesta ordem:
 //   1. valida o tenantId no banco: a linha do envio tem de existir nesse tenant;
 //   2. linha que já saiu de `queued` não envia de novo (evento duplicado, job repetido);
-//   3. elegibilidade (bloqueio com motivo) e conteúdo do template (bloqueio com motivo);
+//   3. elegibilidade (bloqueio com motivo; a confirmação de opt-out tem a regra da D15) e conteúdo do template (bloqueio com motivo);
 //   4. trava do número (um envio por tenant por vez; outros tenants seguem em paralelo);
 //   5. política: expira, adia (teto, janela, intervalo) ou envia; a vaga do teto é consumida no
 //      banco antes do envio e devolvida se o envio falhar, então retentativa não gasta o teto;
@@ -74,7 +74,11 @@ export function createOutboundProcessor(deps: OutboundProcessorDeps) {
     }
     const type = message.messageType;
 
-    const eligibility = await isContactEligibleForProactive(repo, message.contactId, now());
+    // A confirmação de opt-out tem regra própria (D15); todo o resto é proativo e o opt-out bloqueia.
+    const eligibility =
+      type === "optout_confirmation"
+        ? await isOptOutConfirmationAllowed(repo, message.contactId, now())
+        : await isContactEligibleForProactive(repo, message.contactId, now());
     if (!eligibility.eligible) {
       await repo.outboundMessages.markBlocked(message.id, eligibility.reason);
       return { outcome: "blocked", reason: eligibility.reason };

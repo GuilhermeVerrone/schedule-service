@@ -92,10 +92,17 @@ export function createOutboundMessagesRepository({ tenantId, db }: TenantScope) 
           },
         });
         if (count === 0) return false;
-        const { contactId } = await tx.outboundMessage.findUniqueOrThrow({
+        const { contactId, messageType } = await tx.outboundMessage.findUniqueOrThrow({
           where: { tenantId_id: { tenantId, id } },
-          select: { contactId: true },
+          select: { contactId: true, messageType: true },
         });
+        // Confirmação de opt-out enviada: marcador para nunca repetir (D15).
+        if (messageType === "optout_confirmation") {
+          await tx.contact.updateMany({
+            where: { id: contactId, tenantId, optOutConfirmationSentAt: null },
+            data: { optOutConfirmationSentAt: input.sentAt },
+          });
+        }
         const conversation = await tx.conversation.upsert({
           where: { tenantId_contactId: { tenantId, contactId } },
           create: { tenantId, contactId, lastMessageAt: input.sentAt },

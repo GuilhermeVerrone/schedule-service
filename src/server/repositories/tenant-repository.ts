@@ -27,7 +27,7 @@ export type { ServiceInput } from "./tenant/services";
 export { WorkingHoursOverlapError } from "./tenant/working-hours";
 export type { AgendaSettings } from "./tenant/settings";
 export type { ConsentInput } from "./tenant/contacts";
-export type { EligibilityFacts } from "./tenant/eligibility";
+export type { EligibilityFacts, OptOutConfirmationFacts } from "./tenant/eligibility";
 export type { SendCounterState } from "./tenant/send-counter";
 export type { ChosenVariation } from "./tenant/message-templates";
 export type { OutboundCreateInput, OutboundSentInput } from "./tenant/outbound-messages";

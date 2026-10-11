@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { formatPhone } from "@/lib/phone";
+import { parseOptOutCommand } from "@/server/messaging/opt-out";
 import { webhookEventSchema } from "@/server/validation/whatsapp";
 import type {
   ConnectionStatus,
@@ -17,7 +18,9 @@ import type {
 // repetido não gravam nada.
 
 export type WebhookResult =
-  | { status: "processed"; tenantId: string }
+  // `optOutConfirmation`: o contato acabou de pedir opt-out e ainda não recebeu a confirmação
+  // única (D15); quem chamou enfileira depois do commit.
+  | { status: "processed"; tenantId: string; optOutConfirmation?: { contactId: string } }
   | { status: "duplicate" }
   | { status: "unknown_session" };
 
@@ -50,9 +53,14 @@ export function contactNameFrom(profileName: string | null, phone: string): stri
 }
 
 // Mensagem recebida: cria ou reencontra o contato pelo telefone (nome do perfil e origem
-// `whatsapp_inbound` só na criação; consentimento nulo), atualiza last_inbound_at, a conversa e
-// grava a mensagem (uma vez por id externo).
-async function applyInboundMessage(tx: Tx, tenantId: string, event: InboundMessage): Promise<void> {
+// `whatsapp_inbound` só na criação; consentimento nulo), aplica `SAIR`/`VOLTAR` (D4), atualiza
+// last_inbound_at, a conversa e grava a mensagem (uma vez por id externo). Devolve o contato que
+// precisa da confirmação de opt-out, se for o caso.
+async function applyInboundMessage(
+  tx: Tx,
+  tenantId: string,
+  event: InboundMessage,
+): Promise<{ contactId: string } | undefined> {
   const at = notAfterNow(event.receivedAt);
   const contact = await tx.contact.upsert({
     where: { tenantId_phone: { tenantId, phone: event.from } },
@@ -64,8 +72,20 @@ async function applyInboundMessage(tx: Tx, tenantId: string, event: InboundMessa
       lastInboundAt: at,
     },
     update: {},
-    select: { id: true },
+    select: { id: true, lastInboundAt: true, optOutConfirmationSentAt: true },
   });
+
+  // Efeito imediato, na mesma transação do evento. Mensagem mais antiga que a última recebida
+  // (entregue fora de ordem) não desfaz um comando mais novo.
+  const command = parseOptOutCommand(event.text);
+  const isLatest = !contact.lastInboundAt || contact.lastInboundAt.getTime() <= at.getTime();
+  if (command && isLatest) {
+    await tx.contact.updateMany({
+      where: { id: contact.id, tenantId },
+      data: { optOut: command === "opt_out" },
+    });
+  }
+
   await tx.contact.updateMany({
     where: { id: contact.id, tenantId, OR: [{ lastInboundAt: null }, { lastInboundAt: { lt: at } }] },
     data: { lastInboundAt: at },
@@ -96,6 +116,10 @@ async function applyInboundMessage(tx: Tx, tenantId: string, event: InboundMessa
     },
     skipDuplicates: true,
   });
+
+  return command === "opt_out" && isLatest && !contact.optOutConfirmationSentAt
+    ? { contactId: contact.id }
+    : undefined;
 }
 
 async function applyDeliveryStatus(tx: Tx, tenantId: string, event: DeliveryStatus): Promise<void> {
@@ -156,8 +180,13 @@ export function createWhatsAppWebhookRepository(db: PrismaClient = prisma) {
           });
           if (count === 0) return { status: "duplicate" } as const;
 
-          if (event.kind === "inbound_message") await applyInboundMessage(tx, tenantId, event);
-          else if (event.kind === "delivery_status") await applyDeliveryStatus(tx, tenantId, event);
+          if (event.kind === "inbound_message") {
+            const optOutConfirmation = await applyInboundMessage(tx, tenantId, event);
+            return optOutConfirmation
+              ? ({ status: "processed", tenantId, optOutConfirmation } as const)
+              : ({ status: "processed", tenantId } as const);
+          }
+          if (event.kind === "delivery_status") await applyDeliveryStatus(tx, tenantId, event);
           else await applyConnectionStatus(tx, tenantId, event);
           return { status: "processed", tenantId } as const;
         },

@@ -14,6 +14,13 @@ export interface EligibilityFacts {
   hasActiveCharge: boolean;
 }
 
+// Fatos da confirmação única de opt-out (D15).
+export interface OptOutConfirmationFacts {
+  optOut: boolean;
+  lastInboundAt: Date | null;
+  optOutConfirmationSentAt: Date | null;
+}
+
 export function createEligibilityRepository({ tenantId, db }: TenantScope) {
   return {
     findFacts(contactId: string): Promise<EligibilityFacts | null> {
@@ -37,6 +44,15 @@ export function createEligibilityRepository({ tenantId, db }: TenantScope) {
           hasActiveCharge: false,
         };
       });
+    },
+
+    findOptOutConfirmationFacts(contactId: string): Promise<OptOutConfirmationFacts | null> {
+      return byId(contactId, () =>
+        db.contact.findFirst({
+          where: { id: contactId, tenantId },
+          select: { optOut: true, lastInboundAt: true, optOutConfirmationSentAt: true },
+        }),
+      );
     },
   };
 }
