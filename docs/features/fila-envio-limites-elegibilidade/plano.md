@@ -75,4 +75,4 @@ Um chat novo por fase. Refs: guia (itens 1-9) e decisões (D1-D16). Pré-requisi
 - Refs: guia 9; D1-D16.
 
 ## Progresso
-- [x] Fase 1  - [x] Fase 2  - [x] Fase 3  - [x] Fase 4  - [x] Fase 5  - [x] Fase 6  - [x] Fase 7  - [x] Fase 8  - [x] Fase 9  - [x] Fase 10  - [x] Fase 11  - [ ] Fase 12
+- [x] Fase 1  - [x] Fase 2  - [x] Fase 3  - [x] Fase 4  - [x] Fase 5  - [x] Fase 6  - [x] Fase 7  - [x] Fase 8  - [x] Fase 9  - [x] Fase 10  - [x] Fase 11  - [x] Fase 12

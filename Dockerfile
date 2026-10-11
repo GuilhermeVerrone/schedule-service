@@ -15,9 +15,9 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY . .
 # src/lib/db.ts exige DATABASE_URL ao ser importado, e o build importa as rotas para coletar a
-# configuração. Endereço fictício e inalcançável, só nesta etapa: não é segredo e nenhuma consulta
+# configuração. Endereço fictício e inalcançável, sem usuário nem senha, só nesta etapa: nenhuma consulta
 # roda no build. A URL real vem do ambiente na hora de rodar.
-RUN DATABASE_URL=postgresql://build:build@127.0.0.1:1/build pnpm build
+RUN DATABASE_URL=postgresql://127.0.0.1:1/build pnpm build
 
 FROM base AS runtime
 ENV NODE_ENV=production PORT=3000
