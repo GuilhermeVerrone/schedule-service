@@ -13,6 +13,8 @@
 // - whatsapp_connections/messages/webhook_events: status, direção e tipo de mídia em CHECK
 //   (texto, não enum); contadores e limites diários não negativos; mensagem recebida sempre
 //   com id externo; mensagem com texto ou mídia.
+// - outbound_messages/message_templates: status, canal, tipo (lista fechada, D16), motivo e
+//   variações em CHECK; contato pela FK composta (tenant_id, contact_id).
 
 generator client {
   provider = "prisma-client"
@@ -69,6 +71,8 @@ model Tenant {
   conversations        Conversation[]
   messages             Message[]
   webhookEvents        WebhookEvent[]
+  outboundMessages     OutboundMessage[]
+  messageTemplates     MessageTemplate[]
 
   @@map("tenants")
 }
@@ -200,25 +204,28 @@ model WorkingHours {
 // Contato do negócio (D5 da Fatia 2; D1 da Fatia 3): cliente final, sem login, que agenda pelo
 // link ou escreve pelo WhatsApp. Reencontrado pelo telefone normalizado.
 model Contact {
-  id            String    @id @default(uuid(7)) @db.Uuid
-  tenantId      String    @map("tenant_id") @db.Uuid
-  name          String
+  id                       String    @id @default(uuid(7)) @db.Uuid
+  tenantId                 String    @map("tenant_id") @db.Uuid
+  name                     String
   // E.164 com "+" e DDI (ex.: +5511987654321), sempre por normalizePhone (src/lib/phone.ts).
-  phone         String
-  email         String?
+  phone                    String
+  email                    String?
   // LGPD: quando e por onde o consentimento foi dado (ex.: "public_booking"). Nulo em cadastro manual sem consentimento.
-  consentAt     DateTime? @map("consent_at") @db.Timestamptz(3)
-  consentSource String?   @map("consent_source")
+  consentAt                DateTime? @map("consent_at") @db.Timestamptz(3)
+  consentSource            String?   @map("consent_source")
   // Pediu para não receber mensagens ("SAIR"); vale até reativar. Uso na Fatia 4.
-  optOut        Boolean   @default(false) @map("opt_out")
+  optOut                   Boolean   @default(false) @map("opt_out")
   // Última mensagem recebida do contato pelo WhatsApp (elegibilidade de 30 dias).
-  lastInboundAt DateTime? @map("last_inbound_at") @db.Timestamptz(3)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  lastInboundAt            DateTime? @map("last_inbound_at") @db.Timestamptz(3)
+  // Quando a confirmação única do opt-out foi enviada (D15): marcada para nunca repetir.
+  optOutConfirmationSentAt DateTime? @map("opt_out_confirmation_sent_at") @db.Timestamptz(3)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  appointments  Appointment[]
-  conversations Conversation[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments     Appointment[]
+  conversations    Conversation[]
+  outboundMessages OutboundMessage[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, phone])
@@ -292,19 +299,22 @@ model RateLimitHit {
 // status: connected | disconnected | qr_pending | banned_suspected (CHECK na migração).
 // O tenant do webhook é resolvido só por session_id (D8): único, gerado pelo servidor e imprevisível.
 model WhatsAppConnection {
-  id             String    @id @default(uuid(7)) @db.Uuid
-  tenantId       String    @unique @map("tenant_id") @db.Uuid
-  status         String    @default("disconnected")
-  sessionId      String    @unique @map("session_id")
+  id               String    @id @default(uuid(7)) @db.Uuid
+  tenantId         String    @unique @map("tenant_id") @db.Uuid
+  status           String    @default("disconnected")
+  sessionId        String    @unique @map("session_id")
   // Última consulta de saúde da conexão no provedor.
-  lastCheckedAt  DateTime? @map("last_checked_at") @db.Timestamptz(3)
-  // Teto diário de envios (uso na Fatia 4): contador do dia `daily_count_date` (no fuso do tenant),
-  // zerado quando o dia muda, e limite configurável.
-  dailySentCount Int       @default(0) @map("daily_sent_count")
-  dailyCountDate DateTime? @map("daily_count_date") @db.Date
-  dailySendLimit Int       @default(100) @map("daily_send_limit")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  lastCheckedAt    DateTime? @map("last_checked_at") @db.Timestamptz(3)
+  // Primeira vez em `connected` (D3): início do aquecimento; reconexão não altera.
+  firstConnectedAt DateTime? @map("first_connected_at") @db.Timestamptz(3)
+  // Teto diário de envios: contador do dia `daily_count_date` (no fuso do tenant), zerado quando o
+  // dia muda. O limite efetivo vem da política de aquecimento (D14); `daily_send_limit` é só um
+  // teto manual opcional do dono, nulo = sem teto manual.
+  dailySentCount   Int       @default(0) @map("daily_sent_count")
+  dailyCountDate   DateTime? @map("daily_count_date") @db.Date
+  dailySendLimit   Int?      @map("daily_send_limit")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -375,4 +385,55 @@ model WebhookEvent {
   @@unique([source, eventId])
   @@index([tenantId, createdAt])
   @@map("webhook_events")
+}
+
+// Registro de cada envio do sistema (Fatia 4, guia 5). status: queued | sent | failed | blocked |
+// expired; canal: whatsapp | email (nulo enquanto não decidido ou se bloqueado sem canal, D8).
+// Tipo da lista fechada (D16). Sem o texto: ele fica em messages (LGPD). A chave de idempotência
+// é única por tenant: o mesmo evento nunca vira dois envios.
+model OutboundMessage {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  contactId       String    @map("contact_id") @db.Uuid
+  messageType     String    @map("message_type")
+  channel         String?
+  status          String    @default("queued")
+  // Código do motivo (ex.: opt_out, no_channel), obrigatório só em `blocked`.
+  blockReason     String?   @map("block_reason")
+  idempotencyKey  String    @map("idempotency_key")
+  // Índice da variação do template usada (escolha sem repetir a última para o contato, D5).
+  templateVariant Int?      @map("template_variant") @db.SmallInt
+  // Id da mensagem no provedor (WhatsApp ou e-mail), depois do envio.
+  externalId      String?   @map("external_id")
+  scheduledFor    DateTime  @default(now()) @map("scheduled_for") @db.Timestamptz(3)
+  sentAt          DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, scheduledFor])
+  @@index([tenantId, contactId, createdAt(sort: Desc)])
+  @@map("outbound_messages")
+}
+
+// Template editável pelo dono (D5): um por tipo da lista fechada (D16) e tenant, com 3 ou mais
+// variações de texto puro com variáveis ({{nome}}), validadas no código.
+model MessageTemplate {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  messageType String   @map("message_type")
+  variations  String[]
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, messageType])
+  @@map("message_templates")
 }

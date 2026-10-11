@@ -134,7 +134,7 @@ describe("whatsapp_connections", () => {
     expect(await pgErrorCode(insertConnection(await insertTenant("sessao-2"), sessionId))).toBe(UNIQUE_VIOLATION);
   });
 
-  it("nasce desconectada, com contador zerado e limite diário padrão", async () => {
+  it("nasce desconectada, com contador zerado e sem teto manual (D14 da Fatia 4)", async () => {
     const tenantId = await insertTenant("padrao");
     const id = await insertReturningId(
       `insert into whatsapp_connections (id, tenant_id, session_id, updated_at) values (gen_random_uuid(), $1, $2, now())`,
@@ -149,7 +149,7 @@ describe("whatsapp_connections", () => {
       status: "disconnected",
       daily_sent_count: 0,
       daily_count_date: null,
-      daily_send_limit: 100,
+      daily_send_limit: null,
       last_checked_at: null,
     });
   });
