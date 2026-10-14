@@ -1,0 +1,22 @@
+# Decisões: Lembretes de agenda
+
+| # | Decisão | Origem | Data |
+|---|---------|--------|------|
+| 1 | Configuração por tenant em tabela `reminder_settings` (uma linha por tenant e tipo `reminder_24h`/`reminder_2h`: `enabled`, `offset_minutes`). Nesta fatia só `enabled` é editável (padrão ligado); `offset_minutes` fixo em 1440 e 120. Linhas criadas com o tenant e por backfill nos existentes | resposta do usuário (item 1) | 2026-10-14 |
+| 2 | `client_confirmed_at` (timestamp nulo) em `Appointment`, sem mudar o enum de status; selo "Cliente confirmou" na agenda do painel; zerado ao reagendar | padrão sugerido, aceito | 2026-10-14 |
+| 3 | Tabela `appointment_reminders` (agendamento, tipo, `starts_at_snapshot`, `scheduled_for`, `status` pending/sent/canceled/expired, `outbound_message_id`, `reply_prompt_sent_at`, `replied_at`; único por agendamento, tipo e horário). Cancelar/reagendar atualiza linhas; a resposta "1"/"2" vale para o último lembrete `sent` do contato sem `replied_at`, de agendamento futuro e `confirmed`; resposta mais de 24 h depois do lembrete é ignorada. Serve de varredura para lembretes `pending` sem job | resposta do usuário (item 3) | 2026-10-14 |
+| 4 | Lembrete de 2 h que cairia fora da janela de 8h às 20h do fuso do tenant sai às 8h se ainda for antes do atendimento; senão não sai. Atendimento antes das 10h fica com o lembrete de 24 h | resposta do usuário (item 4, opção A) | 2026-10-14 |
+| 5 | Agendamento criado com menos de 24 h de antecedência não gera o lembrete de 24 h; o de 2 h só se couber | padrão sugerido, aceito | 2026-10-14 |
+| 6 | Resposta lida por texto simples (sem IA): normaliza (minúscula, sem acento, pontuação e emoji) e casa por listas curtas. Confirmar: `1`, `sim`, `confirmo`, `confirmado`, `ok`, `vou`, `estarei lá`, 👍. Cancelar: `2`, `cancelar`, `cancela`, `desmarcar`, `não vou`, `não posso`. Ambíguo ou com os dois lados: não altera nada e manda a orientação. Só mensagem curta (até cerca de 6 palavras) com lembrete aguardando resposta; o resto vai para o dono ver (chatbot é a Fatia 8). Orientação enviada no máximo uma vez por lembrete | resposta do usuário (item 6) | 2026-10-14 |
+| 7 | Lembrete de 2 h só oferece "1 confirmar"; o de 24 h oferece 1 e 2. "2" fora do prazo (`cancelDeadlineMinutes` do tenant, padrão 120) não cancela e responde que é preciso falar com o negócio. A regra usa o prazo do tenant, igual ao link de gestão | resposta do usuário (item 7) | 2026-10-14 |
+| 8 | Entra nesta fatia a fiação de `appointment_confirmation` (agendamento público e manual enfileiram a confirmação, chave `appointment_confirmation:<appointmentId>`; pendência 5 da Fatia 4) | resposta do usuário (item 8) | 2026-10-14 |
+| 9 | Todo texto novo é template editável pelo dono (3 ou mais variações, textos padrão no código): `appointment_reminder_24h`, `appointment_reminder_2h`, `appointment_reply_confirmed`, `appointment_reply_canceled`, `appointment_reply_help`, `appointment_reply_cancel_denied`. Variáveis novas: data, hora, serviço, profissional e nome do negócio. Os dois CHECKs de tipo mudam na mesma migração | resposta do usuário (item 9) | 2026-10-14 |
+| 10 | **Altera a D4 da Fatia 4:** palavras de opt-out passam a ser `SAIR`, `PARAR` e `STOP`; `CANCELAR` deixa de ser opt-out (em qualquer contexto) e, com lembrete aguardando resposta, cancela o agendamento. A resposta de cancelamento avisa "para não receber mais mensagens, responda SAIR". Exige ajustar `opt-out.ts` e os testes da Fatia 4 | resposta do usuário (item 6) | 2026-10-14 |
+| 11 | Template do lembrete de 24 h exige a variável `{{opcoes}}` para salvar (o sistema monta "Responda 1 para confirmar ou 2 para cancelar") | padrão sugerido; **confirmar** | 2026-10-14 |
+| 12 | `appointment_confirmation` só informa, sem opções de resposta; a resposta vale a partir do primeiro lembrete | padrão sugerido; **confirmar** | 2026-10-14 |
+
+## Premissas assumidas
+- As decisões 11 e 12 foram aplicadas pelo padrão sugerido, porque não houve resposta explícita; a aprovação deste passo as confirma.
+- `CANCELAR` fora de contexto de lembrete passa a não fazer nada (interpretação de "troque o opt-out para sair, parar ou stop"); fica registrada na decisão 10.
+- Os lembretes herdam da Fatia 4 teto diário, aquecimento, elegibilidade, opt-out, fallback por e-mail, expiração de 24 h e retentativa.
+- Fora desta fatia: antecedência e janela configuráveis, chatbot, cobrança, deploy e `AkgProvider` real.

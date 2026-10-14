@@ -11,9 +11,9 @@ Assistente de atendimento, agenda e cobrança para pequenos negócios. Este repo
 - **Fatia 4** (`fila-envio-limites-elegibilidade`): fila de envio por número (BullMQ + Redis) com
   limites anti-banimento, elegibilidade para mensagem proativa, opt-out por "SAIR", templates
   editáveis e e-mail de reserva quando o WhatsApp cai. App, worker e Redis em Docker Compose.
-
-Documentação por fatia em `docs/features/<slug>/` (guia, decisões, impacto, plano, pendências e
-evidências por fase). Contexto do produto: `prompt-guide.md`.
+  aasdas
+  Documentação por fatia em `docs/features/<slug>/` (guia, decisões, impacto, plano, pendências e
+  evidências por fase). Contexto do produto: `prompt-guide.md`.
 
 ## Stack
 
@@ -42,25 +42,25 @@ evidências por fase). Contexto do produto: `prompt-guide.md`.
 
 2. Copie `.env.example` para `.env` e preencha. O `.env` está no `.gitignore`; nunca o versione.
 
-   | Variável | Para quê |
-   |---|---|
-   | `DATABASE_URL` | Branch dev, conexão pooled (app) |
-   | `DIRECT_URL` | Branch dev, conexão direta (migrações do Prisma) |
-   | `TEST_DATABASE_URL` | Branch test, conexão pooled (Vitest e servidor do E2E) |
-   | `TEST_DIRECT_URL` | Branch test, conexão direta (migração antes da suíte) |
-   | `APP_BASE_URL` | URL base do app, ex.: `http://localhost:3000` |
-   | `PUBLIC_BOOKING_BASE_URL` | Base do link público de agendamento (fatias futuras) |
-   | `EMAIL_FROM_DOMAIN` | Subdomínio de envio do e-mail de reserva; o remetente é `nao-responda@<domínio>` |
-   | `WHATSAPP_PROVIDER` | `akg` ou `fake`. Obrigatório em produção; sem valor, o Fake é usado fora de produção |
-   | `AKG_BASE_URL` | URL da instância do WA-AKG (só servidor) |
-   | `AKG_API_KEY` | Chave da API do WA-AKG (só servidor, nunca vai ao navegador nem ao log) |
-   | `WHATSAPP_WEBHOOK_SECRET` | Segredo que o provedor envia ao chamar o webhook (mínimo 16 caracteres; sem ele, todo webhook é recusado) |
-   | `REDIS_PASSWORD` | Senha do Redis do Compose; o Compose monta o `REDIS_URL` do app e do worker com ela (obrigatória para `docker compose`) |
-   | `REDIS_URL` | URL do Redis das filas fora do Compose (`pnpm dev`, `pnpm worker`), ex.: `redis://:<senha>@127.0.0.1:6379` |
-   | `TEST_REDIS_PASSWORD` | Senha do Redis dos testes (`docker-compose.test.yml`) |
-   | `TEST_REDIS_URL` | URL do Redis dos testes (porta 6380, presa em 127.0.0.1) |
-   | `EMAIL_PROVIDER` | `resend` ou `fake`. Obrigatório em produção; sem valor, o Fake é usado fora de produção |
-   | `RESEND_API_KEY` | Chave da API do Resend (só servidor, nunca vai ao log) |
+   | Variável                  | Para quê                                                                                                                |
+   | ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+   | `DATABASE_URL`            | Branch dev, conexão pooled (app)                                                                                        |
+   | `DIRECT_URL`              | Branch dev, conexão direta (migrações do Prisma)                                                                        |
+   | `TEST_DATABASE_URL`       | Branch test, conexão pooled (Vitest e servidor do E2E)                                                                  |
+   | `TEST_DIRECT_URL`         | Branch test, conexão direta (migração antes da suíte)                                                                   |
+   | `APP_BASE_URL`            | URL base do app, ex.: `http://localhost:3000`                                                                           |
+   | `PUBLIC_BOOKING_BASE_URL` | Base do link público de agendamento (fatias futuras)                                                                    |
+   | `EMAIL_FROM_DOMAIN`       | Subdomínio de envio do e-mail de reserva; o remetente é `nao-responda@<domínio>`                                        |
+   | `WHATSAPP_PROVIDER`       | `akg` ou `fake`. Obrigatório em produção; sem valor, o Fake é usado fora de produção                                    |
+   | `AKG_BASE_URL`            | URL da instância do WA-AKG (só servidor)                                                                                |
+   | `AKG_API_KEY`             | Chave da API do WA-AKG (só servidor, nunca vai ao navegador nem ao log)                                                 |
+   | `WHATSAPP_WEBHOOK_SECRET` | Segredo que o provedor envia ao chamar o webhook (mínimo 16 caracteres; sem ele, todo webhook é recusado)               |
+   | `REDIS_PASSWORD`          | Senha do Redis do Compose; o Compose monta o `REDIS_URL` do app e do worker com ela (obrigatória para `docker compose`) |
+   | `REDIS_URL`               | URL do Redis das filas fora do Compose (`pnpm dev`, `pnpm worker`), ex.: `redis://:<senha>@127.0.0.1:6379`              |
+   | `TEST_REDIS_PASSWORD`     | Senha do Redis dos testes (`docker-compose.test.yml`)                                                                   |
+   | `TEST_REDIS_URL`          | URL do Redis dos testes (porta 6380, presa em 127.0.0.1)                                                                |
+   | `EMAIL_PROVIDER`          | `resend` ou `fake`. Obrigatório em produção; sem valor, o Fake é usado fora de produção                                 |
+   | `RESEND_API_KEY`          | Chave da API do Resend (só servidor, nunca vai ao log)                                                                  |
 
    O domínio nunca fica fixo no código: tudo vem dessas variáveis.
 
@@ -124,45 +124,45 @@ docker compose down           # para (o volume redis-data guarda a fila)
 
 ### Telas
 
-| Rota | Quem | O quê |
-|---|---|---|
-| `/cadastro`, `/login` | dono | acesso |
-| `/painel`, `/painel/servicos`, `/painel/profissionais`, `/painel/profissionais/[id]/horarios` | dono | catálogo e horários (Fatia 1) |
-| `/painel/agenda` | dono | agenda em dia e semana (lista no celular): agendamento manual, cancelar, remarcar, concluir, bloqueios |
-| `/painel/configuracoes` | dono | dados do negócio (descrição, endereço, telefone) e parâmetros da agenda |
-| `/{slug}` | público | Início do site do negócio |
-| `/{slug}/servicos`, `/{slug}/equipe` | público | serviços e profissionais ativos e vinculados |
-| `/{slug}/agendar` | público | agendar em 4 passos: serviço, profissional (ou "qualquer"), dia e horário, dados e consentimento |
-| `/{slug}/agendamento/{token}` | quem tem o link | ver, remarcar e cancelar o agendamento até o prazo |
+| Rota                                                                                          | Quem            | O quê                                                                                                  |
+| --------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------ |
+| `/cadastro`, `/login`                                                                         | dono            | acesso                                                                                                 |
+| `/painel`, `/painel/servicos`, `/painel/profissionais`, `/painel/profissionais/[id]/horarios` | dono            | catálogo e horários (Fatia 1)                                                                          |
+| `/painel/agenda`                                                                              | dono            | agenda em dia e semana (lista no celular): agendamento manual, cancelar, remarcar, concluir, bloqueios |
+| `/painel/configuracoes`                                                                       | dono            | dados do negócio (descrição, endereço, telefone) e parâmetros da agenda                                |
+| `/{slug}`                                                                                     | público         | Início do site do negócio                                                                              |
+| `/{slug}/servicos`, `/{slug}/equipe`                                                          | público         | serviços e profissionais ativos e vinculados                                                           |
+| `/{slug}/agendar`                                                                             | público         | agendar em 4 passos: serviço, profissional (ou "qualquer"), dia e horário, dados e consentimento       |
+| `/{slug}/agendamento/{token}`                                                                 | quem tem o link | ver, remarcar e cancelar o agendamento até o prazo                                                     |
 
 Slug inexistente responde 404 já no proxy. O link de gestão aparece só na tela de confirmação
 (não há envio por e-mail nem WhatsApp nesta fatia); o banco guarda só o SHA-256 do token.
 
 ### API do painel (exige sessão; o tenant vem da sessão)
 
-| Método e rota | O quê |
-|---|---|
-| `GET`, `PATCH /api/settings` | dados do negócio e parâmetros da agenda (`PATCH` parcial) |
-| `GET /api/appointments?from&to[&professionalId][&status]` | agenda por intervalo (ISO 8601 com fuso, até 62 dias) |
-| `POST /api/appointments` | agendamento manual `{ professionalId, serviceId, startsAt, contact: { name, phone, email? } }` |
-| `GET /api/appointments/{id}` | um agendamento |
-| `POST /api/appointments/{id}/cancel`, `/complete`, `/reschedule` | cancelar, concluir, remarcar `{ startsAt, professionalId? }` |
-| `GET`, `POST /api/time-blocks` | bloqueios por intervalo; criar `{ professionalId, startsAt, endsAt, reason? }` |
-| `GET`, `DELETE /api/time-blocks/{id}` | ler e remover bloqueio |
-| `GET /api/availability?serviceId&date[&professionalId]` | horários livres do dia (`date` = `AAAA-MM-DD` no fuso do negócio) |
+| Método e rota                                                    | O quê                                                                                          |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `GET`, `PATCH /api/settings`                                     | dados do negócio e parâmetros da agenda (`PATCH` parcial)                                      |
+| `GET /api/appointments?from&to[&professionalId][&status]`        | agenda por intervalo (ISO 8601 com fuso, até 62 dias)                                          |
+| `POST /api/appointments`                                         | agendamento manual `{ professionalId, serviceId, startsAt, contact: { name, phone, email? } }` |
+| `GET /api/appointments/{id}`                                     | um agendamento                                                                                 |
+| `POST /api/appointments/{id}/cancel`, `/complete`, `/reschedule` | cancelar, concluir, remarcar `{ startsAt, professionalId? }`                                   |
+| `GET`, `POST /api/time-blocks`                                   | bloqueios por intervalo; criar `{ professionalId, startsAt, endsAt, reason? }`                 |
+| `GET`, `DELETE /api/time-blocks/{id}`                            | ler e remover bloqueio                                                                         |
+| `GET /api/availability?serviceId&date[&professionalId]`          | horários livres do dia (`date` = `AAAA-MM-DD` no fuso do negócio)                              |
 
 ### API pública (sem sessão; o tenant vem só do slug)
 
 Prefixo `/api/public/{slug}/`: o proxy não lê a sessão nem injeta `tenantId`, e os corpos são
 estritos (campo a mais, como um `tenantId`, dá 400).
 
-| Método e rota | O quê |
-|---|---|
-| `GET /api/public/{slug}` | negócio, serviços e profissionais ativos e vinculados |
-| `GET /api/public/{slug}/availability?serviceId&date[&professionalId]` | horários livres do dia, sem dados de clientes |
-| `POST /api/public/{slug}/appointments` | agendar `{ serviceId, professionalId?, startsAt, contact: { name, phone, email? }, consent: true }`; devolve o token de gestão uma única vez |
-| `GET /api/public/{slug}/appointments/{token}` | ver pelo link |
-| `POST /api/public/{slug}/appointments/{token}/cancel`, `/reschedule` | cancelar, remarcar `{ startsAt, professionalId? }` |
+| Método e rota                                                         | O quê                                                                                                                                        |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/public/{slug}`                                              | negócio, serviços e profissionais ativos e vinculados                                                                                        |
+| `GET /api/public/{slug}/availability?serviceId&date[&professionalId]` | horários livres do dia, sem dados de clientes                                                                                                |
+| `POST /api/public/{slug}/appointments`                                | agendar `{ serviceId, professionalId?, startsAt, contact: { name, phone, email? }, consent: true }`; devolve o token de gestão uma única vez |
+| `GET /api/public/{slug}/appointments/{token}`                         | ver pelo link                                                                                                                                |
+| `POST /api/public/{slug}/appointments/{token}/cancel`, `/reschedule`  | cancelar, remarcar `{ startsAt, professionalId? }`                                                                                           |
 
 - **Limite por IP:** leitura 120 pedidos/min; escrita (agendar, cancelar, remarcar) 10 pedidos a
   cada 10 min. Acima disso, 429 com `Retry-After`. O IP vem do primeiro `x-forwarded-for`.
@@ -175,11 +175,11 @@ estritos (campo a mais, como um `tenantId`, dá 400).
 
 ### Telas
 
-| Rota | Quem | O quê |
-|---|---|---|
-| `/painel/whatsapp` | dono | aviso de risco de bloqueio, conectar por QR code (com expiração e renovação), status, alerta de queda ou de suspeita de bloqueio, reconectar e desconectar |
-| `/painel/conversas` | dono | conversas do negócio (contato, última mensagem, horário), 50 por página |
-| `/painel/conversas/{id}` | dono | mensagens da conversa, 50 por página; mídia aparece só como `[imagem]`, `[áudio]` etc. |
+| Rota                     | Quem | O quê                                                                                                                                                      |
+| ------------------------ | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/painel/whatsapp`       | dono | aviso de risco de bloqueio, conectar por QR code (com expiração e renovação), status, alerta de queda ou de suspeita de bloqueio, reconectar e desconectar |
+| `/painel/conversas`      | dono | conversas do negócio (contato, última mensagem, horário), 50 por página                                                                                    |
+| `/painel/conversas/{id}` | dono | mensagens da conversa, 50 por página; mídia aparece só como `[imagem]`, `[áudio]` etc.                                                                     |
 
 As telas consultam o servidor por polling (3 s com QR na tela, 15 s nos outros casos), pausam
 com a aba escondida e param ao sair. As conversas são **somente leitura**: nenhuma tela envia
@@ -187,14 +187,14 @@ mensagem (resposta manual entra na Fatia 8; os envios do sistema passam pela fil
 
 ### API do painel (exige sessão; o tenant vem da sessão)
 
-| Método e rota | O quê |
-|---|---|
-| `GET /api/whatsapp` | status da conexão (`not_configured`, `qr_pending` + QR, `connected`, `disconnected`, `banned_suspected`); `live: false` quando o provedor não respondeu e o estado é o último gravado |
-| `POST /api/whatsapp/connect` | cria a sessão e devolve o QR; já conectado → 409 `already_connected` |
-| `POST /api/whatsapp/reconnect` | QR novo na mesma sessão; sem conexão → 404; conectado → 409 |
-| `POST /api/whatsapp/disconnect` | desconecta (idempotente); sem conexão → 404 |
-| `GET /api/conversations?page=N` | conversas, 50 por página, mais recente primeiro |
-| `GET /api/conversations/{id}/messages?page=N` | conversa + mensagens, 50 por página; de outro negócio ou inexistente → 404 |
+| Método e rota                                 | O quê                                                                                                                                                                                 |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/whatsapp`                           | status da conexão (`not_configured`, `qr_pending` + QR, `connected`, `disconnected`, `banned_suspected`); `live: false` quando o provedor não respondeu e o estado é o último gravado |
+| `POST /api/whatsapp/connect`                  | cria a sessão e devolve o QR; já conectado → 409 `already_connected`                                                                                                                  |
+| `POST /api/whatsapp/reconnect`                | QR novo na mesma sessão; sem conexão → 404; conectado → 409                                                                                                                           |
+| `POST /api/whatsapp/disconnect`               | desconecta (idempotente); sem conexão → 404                                                                                                                                           |
+| `GET /api/conversations?page=N`               | conversas, 50 por página, mais recente primeiro                                                                                                                                       |
+| `GET /api/conversations/{id}/messages?page=N` | conversa + mensagens, 50 por página; de outro negócio ou inexistente → 404                                                                                                            |
 
 Respostas do WhatsApp saem com `Cache-Control: no-store` (o QR dá acesso ao WhatsApp do negócio)
 e nunca trazem `tenantId`, id da sessão do provedor nem id externo. Provedor fora do ar → 503
@@ -259,13 +259,13 @@ faz a varredura). Trocar pela API oficial da Meta é escrever outro provider.
 
 ### Parâmetros da agenda (por negócio, em `/painel/configuracoes`)
 
-| Campo | Padrão | Faixa |
-|---|---|---|
-| `slotStepMinutes`: passo da grade | 15 | 5 a 120, múltiplo de 5 |
-| `bufferMinutes`: intervalo entre atendimentos | 0 | 0 a 120, múltiplo de 5 |
-| `minAdvanceMinutes`: antecedência mínima | 120 (2 h) | 0 a 43.200 (30 dias) |
-| `maxWindowDays`: janela máxima | 60 | 1 a 365 |
-| `cancelDeadlineMinutes`: prazo para o cliente cancelar ou remarcar | 120 (2 h) | 0 a 43.200 |
+| Campo                                                              | Padrão    | Faixa                  |
+| ------------------------------------------------------------------ | --------- | ---------------------- |
+| `slotStepMinutes`: passo da grade                                  | 15        | 5 a 120, múltiplo de 5 |
+| `bufferMinutes`: intervalo entre atendimentos                      | 0         | 0 a 120, múltiplo de 5 |
+| `minAdvanceMinutes`: antecedência mínima                           | 120 (2 h) | 0 a 43.200 (30 dias)   |
+| `maxWindowDays`: janela máxima                                     | 60        | 1 a 365                |
+| `cancelDeadlineMinutes`: prazo para o cliente cancelar ou remarcar | 120 (2 h) | 0 a 43.200             |
 
 As faixas valem no Zod e em CHECKs no banco. Antecedência e janela valem só para o cliente; o dono
 agenda sem elas. Horário livre = horário de trabalho − bloqueios − agendamentos `confirmed`
@@ -319,11 +319,11 @@ enqueueMessage({ tenantId, contactId, messageType, idempotencyKey, scheduledFor?
 
 `isContactEligibleForProactive` (`src/server/outbound/eligibility.ts`). Elegível se:
 
-| Regra | Condição |
-|---|---|
-| (a) | escreveu nos últimos 30 dias (`contacts.last_inbound_at`, 30 dias exatos ainda vale) |
-| (b) | tem agendamento `confirmed` (cancelado e concluído não contam), plano ou cobrança ativa (plano e cobrança entram nas Fatias 6 e 7) |
-| (c) | foi cadastrado com consentimento registrado (`contacts.consent_at`) |
+| Regra | Condição                                                                                                                           |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| (a)   | escreveu nos últimos 30 dias (`contacts.last_inbound_at`, 30 dias exatos ainda vale)                                               |
+| (b)   | tem agendamento `confirmed` (cancelado e concluído não contam), plano ou cobrança ativa (plano e cobrança entram nas Fatias 6 e 7) |
+| (c)   | foi cadastrado com consentimento registrado (`contacts.consent_at`)                                                                |
 
 `opt_out` vence as três regras. Inelegível vira `blocked` com o motivo (`not_eligible`, `opt_out`,
 `contact_not_found`, …) e nunca é enviado nem gasta o teto. O contato é sempre lido com o tenant do job.
@@ -332,17 +332,17 @@ enqueueMessage({ tenantId, contactId, messageType, idempotencyKey, scheduledFor?
 
 Constantes em `src/server/outbound/send-policy.ts` (função pura, sem Redis):
 
-| Item | Valor |
-|---|---|
-| Intervalo entre mensagens do mesmo número | aleatório, 8 a 25 s |
-| Teto diário (número maduro) | 200 |
+| Item                                                                        | Valor                                                                                                |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Intervalo entre mensagens do mesmo número                                   | aleatório, 8 a 25 s                                                                                  |
+| Teto diário (número maduro)                                                 | 200                                                                                                  |
 | Aquecimento (dias desde a primeira conexão `connected`; reconexão não zera) | dias 1-2: 20 · 3-4: 40 · 5-6: 80 · 7-8: 120 · 9-10: 160 · 11+: 200; fase de aquecimento até o dia 14 |
-| Teto manual (`whatsapp_connections.daily_send_limit`) | opcional, nulo por padrão; só reduz o limite, nunca aumenta |
-| Virada do dia | meia-noite no fuso do tenant |
-| Janela de envio | 8h às 20h no fuso do tenant; fora dela espera. Exceção: confirmação de agendamento |
-| Teto atingido | adia para o dia seguinte (confirmação de agendamento primeiro, depois ordem de chegada) |
-| Expiração | mais de 24 h de atraso vira `expired` |
-| Retentativa | 3, com espera de 1, 5 e 15 min; falha final fica `failed` e devolve a vaga do teto |
+| Teto manual (`whatsapp_connections.daily_send_limit`)                       | opcional, nulo por padrão; só reduz o limite, nunca aumenta                                          |
+| Virada do dia                                                               | meia-noite no fuso do tenant                                                                         |
+| Janela de envio                                                             | 8h às 20h no fuso do tenant; fora dela espera. Exceção: confirmação de agendamento                   |
+| Teto atingido                                                               | adia para o dia seguinte (confirmação de agendamento primeiro, depois ordem de chegada)              |
+| Expiração                                                                   | mais de 24 h de atraso vira `expired`                                                                |
+| Retentativa                                                                 | 3, com espera de 1, 5 e 15 min; falha final fica `failed` e devolve a vaga do teto                   |
 
 O contador diário é atômico no SQL (`whatsapp_connections.daily_sent_count`): dois workers nunca
 passam do teto. A fila tem concorrência por tenant: um número no intervalo não trava os outros.
@@ -380,35 +380,35 @@ usada para o mesmo contato. O texto é sempre texto puro (nunca HTML).
 
 ### Telas
 
-| Rota | Quem | O quê |
-|---|---|---|
-| `/painel/whatsapp` | dono | bloco só leitura: uso de hoje ("42 de 200"), fase do aquecimento e envios bloqueados com o motivo (50 por página) |
-| `/painel/mensagens` | dono | templates por tipo: editar variações, pré-visualizar como texto puro, restaurar o padrão (com "Desfazer") |
+| Rota                | Quem | O quê                                                                                                             |
+| ------------------- | ---- | ----------------------------------------------------------------------------------------------------------------- |
+| `/painel/whatsapp`  | dono | bloco só leitura: uso de hoje ("42 de 200"), fase do aquecimento e envios bloqueados com o motivo (50 por página) |
+| `/painel/mensagens` | dono | templates por tipo: editar variações, pré-visualizar como texto puro, restaurar o padrão (com "Desfazer")         |
 
 ### API do painel (exige sessão; o tenant vem da sessão)
 
-| Método e rota | O quê |
-|---|---|
-| `GET /api/whatsapp/usage` | uso do dia, limite efetivo e fase do aquecimento; sem conexão, `configured: false` |
-| `GET /api/whatsapp/blocked?page=N` | envios bloqueados com o motivo, 50 por página |
-| `GET /api/message-templates` | um template por tipo da lista fechada |
-| `GET`, `PATCH /api/message-templates/{id}` | ler; trocar as variações `{ variations }` (inválido → 400 `invalid_template`) |
-| `POST /api/message-templates/{id}/restore` | voltar ao texto padrão |
+| Método e rota                              | O quê                                                                              |
+| ------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `GET /api/whatsapp/usage`                  | uso do dia, limite efetivo e fase do aquecimento; sem conexão, `configured: false` |
+| `GET /api/whatsapp/blocked?page=N`         | envios bloqueados com o motivo, 50 por página                                      |
+| `GET /api/message-templates`               | um template por tipo da lista fechada                                              |
+| `GET`, `PATCH /api/message-templates/{id}` | ler; trocar as variações `{ variations }` (inválido → 400 `invalid_template`)      |
+| `POST /api/message-templates/{id}/restore` | voltar ao texto padrão                                                             |
 
 Não há criação nem exclusão de template (o tipo é do sistema) e nenhuma rota aceita `tenantId` do cliente.
 
 ## Testes e checagens
 
-| Comando | O que faz |
-|---|---|
-| `pnpm lint` | ESLint |
-| `pnpm typecheck` | Tipos de rota do Next + `tsc --noEmit` |
-| `pnpm check:tenant-access` | Falha se algum código fora de `src/server/repositories/` acessar o banco direto |
-| `pnpm test` | Vitest contra a branch test e o Redis de teste (isolamento de tenant, auth, validação, fila e worker) |
-| `pnpm redis:test:up` / `redis:test:down` | Sobe e derruba o Redis dos testes de integração (`docker-compose.test.yml`, porta 6380 em 127.0.0.1) |
-| `pnpm build` | Build de produção |
-| `docker compose build` | Imagem do app e do worker |
-| `pnpm test:e2e` | Playwright em desktop e mobile; sobe `next start` na porta 3100 contra a branch test |
+| Comando                                  | O que faz                                                                                             |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `pnpm lint`                              | ESLint                                                                                                |
+| `pnpm typecheck`                         | Tipos de rota do Next + `tsc --noEmit`                                                                |
+| `pnpm check:tenant-access`               | Falha se algum código fora de `src/server/repositories/` acessar o banco direto                       |
+| `pnpm test`                              | Vitest contra a branch test e o Redis de teste (isolamento de tenant, auth, validação, fila e worker) |
+| `pnpm redis:test:up` / `redis:test:down` | Sobe e derruba o Redis dos testes de integração (`docker-compose.test.yml`, porta 6380 em 127.0.0.1)  |
+| `pnpm build`                             | Build de produção                                                                                     |
+| `docker compose build`                   | Imagem do app e do worker                                                                             |
+| `pnpm test:e2e`                          | Playwright em desktop e mobile; sobe `next start` na porta 3100 contra a branch test                  |
 
 Antes do `pnpm test`, suba o Redis de teste (`pnpm redis:test:up`). O E2E usa o build: rode `pnpm build` antes. Na primeira vez, instale o navegador:
 
