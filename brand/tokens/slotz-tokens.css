@@ -1,0 +1,40 @@
+/*
+ * Extensão de tokens do Slotz sobre o design system da Algoritmi.
+ * Cole dentro do :root de src/app/globals.css (e os mapeamentos no @theme inline).
+ * Nada aqui muda a paleta da Algoritmi: só acrescenta o que uma agenda precisa.
+ * Contraste medido (WCAG): texto ok/warn/danger sobre o próprio fundo claro ≥ 5,3:1.
+ */
+:root {
+  /* Estados financeiros (cobrança) */
+  --ok: #1b6e45;
+  --ok-wash: rgb(27 110 69 / 0.1);
+  --warn: #80530a;
+  --warn-wash: rgb(128 83 10 / 0.12);
+  --danger-wash: rgb(179 38 30 / 0.08);
+
+  /* Estados do horário (slot), derivados do violeta e do grafite da marca */
+  --slot-free-bg: var(--surface);
+  --slot-free-line: var(--line-strong);
+  --slot-held-bg: var(--violet-wash);
+  --slot-held-line: rgb(73 45 235 / 0.28);
+  --slot-held-ink: var(--violet-deep);
+  --slot-booked-bg: var(--violet);
+  --slot-booked-ink: var(--on-dark);
+  --slot-blocked-bg: var(--tint);
+  --slot-blocked-ink: var(--ink-3);
+}
+
+@theme inline {
+  --color-ok: var(--ok);
+  --color-ok-wash: var(--ok-wash);
+  --color-warn: var(--warn);
+  --color-warn-wash: var(--warn-wash);
+  --color-danger-wash: var(--danger-wash);
+}
+
+/* Horário bloqueado: hachura discreta em grafite, nunca em cor */
+.slot-blocked {
+  background-color: var(--slot-blocked-bg);
+  background-image: repeating-linear-gradient(135deg, rgb(38 34 35 / 0.07) 0 1px, transparent 1px 7px);
+  color: var(--slot-blocked-ink);
+}
